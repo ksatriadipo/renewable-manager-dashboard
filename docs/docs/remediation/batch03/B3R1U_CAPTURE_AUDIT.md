@@ -68,3 +68,16 @@ EditMode b3r5 2652/0/0/4. uidev A57 18/8, 960×540 18/8; **regression lock gagal
 | r527c fixture integrity | fixture not installed; `save_full_changed: maxSeenUnix,residents` | Finding: `save_full` hash includes real-time fields (`maxSeenUnix` wall-clock guard, `residents` simulation) that change during any capture → fixture restoration check must hash these separately as volatile (proposal for Auditor; criterion unchanged until approved) |
 | r523 office day/night/OFF | PASS (edge_clear_hits 0) | as b3r3u |
 | r529b occlusion | PASS (unchanged) | as b3r3u |
+
+## b3r6 / b3r6u — r530 road-following routing, actual Goldmeadow (21 Nov 2026)
+HEAD `ed0b01c` (r530) on `a2f8876` (r525b). EditMode 2659/0/0/4. Build OK. uidev A57 18/8, 960×540 18/8; **regression lock gagal 0 both profiles**; judge regressions 0; perfshot lock 0 (known PERF GATE FAIL unchanged, F2 +1.2 %). r529b self-test, r523 office evidence unchanged (PASS). Switch default OFF (`DefaultEnabled = false`); evidence ON shots force the switch ON (`switch_powerline15x 1`), OFF shot = legacy straight line.
+player.log: `X15POWER: g18a_cable gardu=A15-B4A-GARDU-KIOSK-V001 kabel 3 tiang 45 konflik_rumah 0 dipindah 1 tanpa_rute 0`.
+
+| Cable | Houses crossed | Min house clearance | Poles (11 m) | Max span | Sag | Endpoints | Verdict |
+|---|---|---|---|---|---|---|---|
+| 1 | 0 | 10.83 m | 13 | 48.08 m | 2 % | not matched (0) | FAIL |
+| 2 | 0 | 10.49 m | 18 | 48.00 m | 2 % | not matched (0) | FAIL |
+| 3 | 0 | 10.83 m | 14 | 48.08 m | 2 % | not matched (0) | FAIL |
+
+Visual review: cables no longer cross houses (FACT, measured + PNG). **Defects:** (1) `b3r525_cable_nearhouse_1_on.png` / `_3_on.png`: the route runs past the island land edge and poles stand in the void (floating poles) — terrain boundary not blocked in r530; (2) cable 2 cuts diagonally across open fields rather than following road/verge; (3) endpoints_matched 0 is unresolved: the kiosk was relocated (`dipindah 1`) and the measurement compares against the original substation data point — not yet proven to be a measurement artefact; (4) route-planning time not measured in the game (no timing instrumentation in r530).
+**Decision: r530 REJECTED (actual-world).** B3-04 stays NEEDS_REWORK; switch stays OFF. Rework in progress: r530b (slope, water/bridge, terrain boundary, min corner spacing 8 m, cache/lifecycle, timing API) + r531 (per-cable measurement against actual kiosk, off-land poles as invalid, 20-rebuild performance).
