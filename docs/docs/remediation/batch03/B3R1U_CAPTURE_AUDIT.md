@@ -81,3 +81,17 @@ player.log: `X15POWER: g18a_cable gardu=A15-B4A-GARDU-KIOSK-V001 kabel 3 tiang 4
 
 Visual review: cables no longer cross houses (FACT, measured + PNG). **Defects:** (1) `b3r525_cable_nearhouse_1_on.png` / `_3_on.png`: the route runs past the island land edge and poles stand in the void (floating poles) — terrain boundary not blocked in r530; (2) cable 2 cuts diagonally across open fields rather than following road/verge; (3) endpoints_matched 0 is unresolved: the kiosk was relocated (`dipindah 1`) and the measurement compares against the original substation data point — not yet proven to be a measurement artefact; (4) route-planning time not measured in the game (no timing instrumentation in r530).
 **Decision: r530 REJECTED (actual-world).** B3-04 stays NEEDS_REWORK; switch stays OFF. Rework in progress: r530b (slope, water/bridge, terrain boundary, min corner spacing 8 m, cache/lifecycle, timing API) + r531 (per-cable measurement against actual kiosk, off-land poles as invalid, 20-rebuild performance).
+
+## b3r8 / b3r8u — r530b + r531 + r530b2 (21 Nov 2026)
+HEAD `1e2392a`. EditMode b3r8 **2679/0/0/4** (r407 lock restored by r530b2). Build OK. Perfshot lock 0 (known PERF GATE FAIL; F2 −0.8 %). uidev A57 / 960×540 18 issues / 8 screens each (from screenshot audit).
+**Regular uidev verdict: FAIL (tooling)** — runner HANG_GUARD killed the player at 18:37:37 and 18:43:13 (`120 dtk tanpa tangkapan baru (png=113)`) during the r531 performance series (no PNG for > 120 s), so `shots_summary.json` was not written → VI-F15 locks "FAIL tanpa baseline". Hang guard unchanged; r531b reworks pacing.
+
+| Evidence | Result |
+|---|---|
+| r530b fail-closed (actual Goldmeadow) | `X15POWER … kabel 0 tiang 0 … tanpa_rute 3 alasan 1:pembangkit_tanpa_penghubung:jauh_dari_jalan, 2:graf_tidak_tersambung_ke_gardu, 3:graf_tidak_tersambung_ke_gardu` — no invalid cable drawn; `b3r531_noroute_1..3_on` PASS |
+| Planner timing (log) | cold 102.2 ms (graph 2,892 nodes / 455 edges, 3 plants, 398 houses), warm 0.0 ms (cache hit); full 3×20 series NOT_RECORDED (killed) |
+| r531 legacy OFF 1–3 | PRECONDITION_FAIL — cause under investigation (r531b) |
+| Island overview | NOT_TESTED (island map deactivates the power root) |
+| Corner close-up | NOT_TESTED (no route has a turn) |
+| Switch toggle / overview after ON→OFF | NOT_RECORDED (killed before) |
+B3-04 stays NEEDS_REWORK; switch OFF. Next round: r530c + r530f + r531b.
