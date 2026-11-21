@@ -1,5 +1,5 @@
 /* Renewable Manager Command Center — vanilla client. Reads data/dashboard.json (static GitHub Pages mode) or
-   /api/dashboard (VPS server mode). Contract: docs/DATA_CONTRACT.md (v2); v1 keys are a labelled fallback.
+   /api/dashboard (VPS server mode). Contract: docs/DATA_CONTRACT.md (v3: pm + forecast); v1 keys are a labelled fallback.
    Anything not recorded renders as NOT_RECORDED — this file never invents values or dates. */
 (function (root) {
   "use strict";
@@ -23,11 +23,14 @@
   function ago(s, now) { var t = ts(s); if (t == null) return ""; var m = Math.round((now - t) / 6e4); if (m < 1) return "just now"; if (m < 60) return m + " min ago"; var h = Math.round(m / 60); if (h < 48) return h + " h ago"; return Math.round(h / 24) + " d ago"; }
   function dateCell(s) { var f = fmtDT(s); return f ? esc(f) : nr(s); }
 
-  var COLORS = { NOT_STARTED: "#9aa3cf", READY: "#7cc4ff", IN_PROGRESS: "#45e3d4", IMPLEMENTED: "#b195ff", TESTED: "#6aa8ff", ACCEPTED: "#9be7b8",
+  var COLORS = { NOT_STARTED: "#9aa3cf", READY: "#7cc4ff", IN_PROGRESS: "#6aa8ff", IMPLEMENTED: "#a58bff", TESTED: "#b195ff", ACCEPTED: "#2fd3c3",
     VISUALLY_ACCEPTED: "#2fd3c3", DONE: "#5fe39a", BLOCKED: "#ff6b78", ON_HOLD: "#ffb454", DEFERRED: "#d9b3ff", CANCELLED: "#8f96bb", REJECTED: "#ff8fa0",
     NEEDS_REWORK: "#ff9f5a", NEEDS_RECHECK: "#ffb454", NOT_TESTED: "#9aa3cf", FAIL: "#ff6b78", PASS: "#5fe39a", OK: "#5fe39a", OPEN: "#ff6b78", RESOLVED: "#5fe39a",
     P0: "#ff6b78", P1: "#ffb454", P2: "#f6c85a", P3: "#9aa3cf", FRESH: "#5fe39a", STALE: "#ffb454", FAILED: "#ff6b78", RED: "#ff6b78", AMBER: "#ffb454", GREEN: "#5fe39a", PAUSED: "#ffb454",
-    PARTIAL: "#ffb454", UNVERIFIED: "#ff9f5a", CONFIRMED: "#5fe39a", RECORDED: "#7cc4ff", NOT_CONNECTED: "#9aa3cf", "N/A": "#8f96bb" };
+    PARTIAL: "#ffb454", UNVERIFIED: "#ff9f5a", CONFIRMED: "#5fe39a", RECORDED: "#7cc4ff", NOT_CONNECTED: "#9aa3cf", "N/A": "#8f96bb",
+    QA_PASS: "#b195ff", DIRECTOR_ACCEPTED: "#2fd3c3", HOLD: "#ffb454", PLANNED: "#9aa3cf", REWORK: "#ff9f5a", WAITING: "#ffb454", FUTURE: "#9aa3cf", INSUFFICIENT_DATA: "#ffb454", PROVISIONAL: "#ffb454",
+    VALIDATED: "#5fe39a", INVALID: "#ff6b78", HELD: "#ffb454", FREE: "#5fe39a", UNQUALIFIED: "#ffb454", PASS_WITH_WARNINGS: "#ffb454", LAUNCH: "#7cc4ff", UNKNOWN: "#9aa3cf",
+    APPROVED: "#2fd3c3", PROPOSED: "#7cc4ff", NOT_AVAILABLE: "#9aa3cf", NOT_COMPUTED: "#9aa3cf", NEXT_MILESTONE: "#f6c85a", VALIDATION_FAILED: "#ff6b78", SOURCE_MISMATCH: "#ff6b78", RECONCILIATION_FAILED: "#ff6b78", SYNC_FAILED: "#ff6b78" };
   function col(s) { return COLORS[String(s || "").toUpperCase().replace(/ /g, "_")] || "#b3badf"; }
   function label(s) { return String(s).replace(/_/g, " "); }
   function tag(s) { return isNR(s) ? nr(s) : '<span class="tag" style="color:' + col(s) + '">' + esc(label(s)) + "</span>"; }
@@ -245,51 +248,7 @@
     return { title: "Workstreams", sub: ws.v2 ? "From workstreams[]" : "workstreams[] " + NR + " — grouped from tasks[].workstream (v1 fallback)", cards: cards, grid: "grid three" };
   }
 
-  /* ---------- C: milestones & timeline ---------- */
-  function msDates(D, m) {
-    var f = obj(obj(obj(D.forecast).per_milestone)[m.id]);
-    return { baseline: m.baseline || m.planned_p50 || null, baseline80: m.baseline_p80 || m.planned_p80 || null, actual: m.actual || null,
-      optimistic: m.optimistic || f.best_date || null, provisional: m.provisional || f.p50_date || null, provisional80: m.provisional_p80 || f.p80_date || null };
-  }
-  function timelineSvg(D, ms, now) {
-    var pts = []; ms.forEach(function (m) { var d = msDates(D, m); Object.keys(d).forEach(function (k) { var t = ts(d[k]); if (t != null) pts.push(t); }); });
-    if (!pts.length) return '<p class="empty">No milestone dates recorded.</p>';
-    pts.push(now); var lo = Math.min.apply(null, pts) - 864e5, hi = Math.max.apply(null, pts) + 864e5;
-    var W = 640, padL = 12, padR = 12, rowH = 46, H = 30 + ms.length * rowH;
-    function x(t) { return padL + (W - padL - padR) * (t - lo) / (hi - lo); }
-    var g = [], days = Math.round((hi - lo) / 864e5), step = days > 40 ? 7 : days > 14 ? 3 : 1;
-    for (var t = lo - (lo % 864e5) + 864e5, i = 0; t < hi; t += 864e5, i++) if (i % step === 0) {
-      g.push('<line x1="' + x(t) + '" x2="' + x(t) + '" y1="18" y2="' + H + '" stroke="rgba(150,168,255,.10)"/><text x="' + x(t) + '" y="12" text-anchor="middle">' + esc(fmtDate(new Date(t).toISOString().slice(0, 10)).replace(/ \d{4}$/, "")) + "</text>");
-    }
-    g.push('<line x1="' + x(now) + '" x2="' + x(now) + '" y1="16" y2="' + H + '" stroke="#45e3d4" stroke-dasharray="3 3"/>');
-    ms.forEach(function (m, i) {
-      var d = msDates(D, m), y = 30 + i * rowH, yy = y + 26;
-      g.push('<text x="' + padL + '" y="' + (y + 8) + '" style="fill:#eef1ff;font-weight:800">' + esc(m.id + " · " + (m.name || "")).slice(0, 70) + "</text>");
-      g.push('<line x1="' + padL + '" x2="' + (W - padR) + '" y1="' + yy + '" y2="' + yy + '" stroke="rgba(150,168,255,.18)"/>');
-      var b = ts(d.baseline), b8 = ts(d.baseline80), p = ts(d.provisional), p8 = ts(d.provisional80), o = ts(d.optimistic), a = ts(d.actual);
-      if (b != null && b8 != null && b8 > b) g.push('<line x1="' + x(b) + '" x2="' + x(b8) + '" y1="' + (yy - 7) + '" y2="' + (yy - 7) + '" stroke="#eef1ff" stroke-width="2" opacity=".5"/>');
-      if (p != null && p8 != null && p8 > p) g.push('<rect x="' + x(p) + '" width="' + (x(p8) - x(p)) + '" y="' + (yy - 4) + '" height="8" rx="4" fill="rgba(246,200,90,.35)"/>');
-      if (b != null) g.push('<path d="M' + x(b) + " " + (yy - 13) + " l6 6 l-6 6 l-6 -6 z\" fill=\"#0b1030\" stroke=\"#eef1ff\" stroke-width=\"2\"><title>Baseline " + esc(d.baseline) + "</title></path>");
-      if (o != null) g.push('<circle cx="' + x(o) + '" cy="' + yy + '" r="5" fill="none" stroke="#f6c85a" stroke-width="2"><title>Optimistic ' + esc(d.optimistic) + "</title></circle>");
-      if (p != null) g.push('<circle cx="' + x(p) + '" cy="' + yy + '" r="5" fill="#f6c85a"><title>Provisional ' + esc(d.provisional) + "</title></circle>");
-      if (a != null) g.push('<rect x="' + (x(a) - 6) + '" y="' + (yy - 6) + '" width="12" height="12" rx="2" fill="#5fe39a"><title>Actual ' + esc(d.actual) + "</title></rect>");
-    });
-    return '<div class="scroll-x"><svg class="chart" viewBox="0 0 ' + W + " " + H + '" style="min-width:520px" role="img" aria-label="Milestone timeline">' + g.join("") + "</svg></div>" +
-      '<div class="legend"><span><svg width="14" height="14" viewBox="0 0 14 14"><path d="M7 1 l6 6 l-6 6 l-6 -6z" fill="none" stroke="#eef1ff" stroke-width="2"/></svg>Baseline (planned)</span><span><svg width="14" height="14"><circle cx="7" cy="7" r="5" fill="none" stroke="#f6c85a" stroke-width="2"/></svg>Optimistic (forecast best)</span><span><svg width="14" height="14"><circle cx="7" cy="7" r="5" fill="#f6c85a"/></svg>Provisional (forecast P50, bar to P80)</span><span>' + sw("#5fe39a") + "Actual</span><span>" + sw("#45e3d4") + "Today</span></div>";
-  }
-  function vTimeline(D, now) {
-    var ms = arr(D.milestones), fc = obj(D.forecast), cp = obj(D.critical_path), out = [];
-    out.push(card("tl-chart", "Milestone timeline", timelineSvg(D, ms, now) + '<p class="note">Forecast label: ' + val(fc.label) + " · resume assumption " + val(fc.resume_assumption) + ". Optimistic and provisional dates are estimates, not commitments.</p>", { cls: "span-all" }));
-    out.push(card("tl-table", "Baseline vs actual vs forecast", '<div class="scroll-x"><table class="t"><thead><tr><th>Milestone</th><th>Progress</th><th>Baseline</th><th>Actual</th><th>Optimistic</th><th>Provisional</th><th>Doc</th></tr></thead><tbody>' +
-      ms.map(function (m) { var d = msDates(D, m); return "<tr><td><b>" + esc(m.id) + "</b> " + esc(m.name || "") + "</td><td>" + (m.complete ? tag("DONE") : esc((m.pct_accepted != null ? m.pct_accepted : "?") + "% acc · " + (m.pct_tested != null ? m.pct_tested : "?") + "% tested")) +
-        "</td><td>" + dateCell(d.baseline) + (d.baseline80 && d.baseline80 !== d.baseline ? '<div class="dim small">P80 ' + dateCell(d.baseline80) + "</div>" : "") + "</td><td>" + dateCell(d.actual) + "</td><td>" + dateCell(d.optimistic) +
-        "</td><td>" + dateCell(d.provisional) + (d.provisional80 ? '<div class="dim small">P80 ' + dateCell(d.provisional80) + "</div>" : "") + "</td><td>" + docBtn(docPathOf(m), "Doc") + "</td></tr>"; }).join("") +
-      "</tbody></table></div>", { cls: "span-all" }));
-    out.push(card("tl-cp", "Critical path", '<div class="small">Length ' + val(num(cp.days_p50), function (x) { return x + " working days (P50, ESTIMATED)"; }) + '</div><div class="row" style="margin-top:8px">' +
-      (arr(cp.path).length ? arr(cp.path).map(function (id) { var t = arr(D.tasks).filter(function (x) { return x.id === id; })[0]; return '<span class="tag" style="color:' + col(t && t.status) + '">' + esc(id) + "</span>"; }).join(" ") : nr()) + "</div>"));
-    out.push(card("tl-assume", "Forecast assumptions", list(fc.assumptions || fc.method || [], function (a) { return "<li class=\"small\">" + esc(a) + "</li>"; }, "No assumption recorded.")));
-    return { title: "Milestones & timeline", sub: "Baseline = planned record · Actual = recorded finish · Optimistic / Provisional = forecast (ESTIMATED)", cards: out, grid: "grid two" };
-  }
+  /* C (legacy timeline with uncalibrated P50/P80 and a 'critical path' label) was replaced by vForecast (SKILL v1.1 §9A, §18). */
 
   /* ---------- D: engineering & QA ---------- */
   function lastTests(r) { var t = arr(r.tests); return t.length ? t[t.length - 1] : null; }
@@ -454,28 +413,332 @@
     return { title: "Release management", sub: "Google Play · projection of the release Markdown records as of " + esc(R.as_of), cards: out, grid: "grid two" };
   }
 
+  /* ---------- Mission Control modules (SKILL v1.1 §6–§12). Generic: every value comes from the `pm` and `forecast`
+     keys (DATA_CONTRACT v3); no project-specific logic. Missing data renders as NOT_RECORDED / UNKNOWN. ---------- */
+  var BUCKETS_DEFAULT = ["DONE", "DIRECTOR_ACCEPTED", "QA_PASS", "IMPLEMENTED", "IN_PROGRESS", "READY", "PLANNED", "REWORK", "BLOCKED", "HOLD"];
+  function PM(D) { return obj(D.pm); }
+  function built(D) { return PM(D).state === "BUILT"; }
+  function FC(D) { return obj(D.forecast); }
+  function fcEngine(D) { return FC(D).schema === "rmct.forecast/1"; }
+  function bucketsOf(D) { var b = arr(obj(PM(D).status_mapping).buckets); return b.length ? b : BUCKETS_DEFAULT; }
+  function nodes(D) { return arr(PM(D).nodes); }
+  function nodeMap(D) { var m = {}; nodes(D).forEach(function (n) { m[n.id] = n; }); return m; }
+  function ids(a, max) { a = arr(a); if (!a.length) return '<span class="dim">none</span>'; var s = a.slice(0, max || 12).map(function (x) { return '<button class="idlink" type="button" data-node="' + esc(x) + '">' + esc(x) + "</button>"; }).join(" "); return s + (a.length > (max || 12) ? ' <span class="dim small">+' + (a.length - (max || 12)) + " more</span>" : ""); }
+  function kv(rows) { return '<dl class="kv">' + rows.map(function (r) { return "<dt>" + esc(r[0]) + "</dt><dd>" + r[1] + "</dd>"; }).join("") + "</dl>"; }
+  function more(key, title, body, ctx) { return '<details class="toggle more"' + (ctx && ctx.ui.open[key] ? " open" : "") + ' data-open="' + esc(key) + '"><summary>' + esc(title) + '</summary><div class="more-in">' + body + "</div></details>"; }
+  function notBuilt(D, key, title) { return card(key, title, "<p>pm " + nr(PM(D).state || NR) + ' — the Mission Control layer is not in this snapshot.</p><p class="note">' + esc(PM(D).note || "Expected key `pm` (DATA_CONTRACT v3).") + "</p>", { cls: "span-all" }); }
+  function pctOf(n, d) { return d ? Math.round(1000 * n / d) / 10 : null; }
+  function genericTable(rows, cap) {
+    rows = arr(rows).filter(function (r) { return r && typeof r === "object"; }); if (!rows.length) return '<p class="empty">None recorded.</p>';
+    var cols = []; rows.forEach(function (r) { Object.keys(r).forEach(function (k) { if (cols.indexOf(k) < 0) cols.push(k); }); });
+    function cell(v) { return v == null || v === "" ? nr() : Array.isArray(v) ? esc(v.join(", ")) : typeof v === "object" ? esc(JSON.stringify(v)) : /^[A-Z][A-Z_]{2,}$/.test(String(v)) ? tag(v) : esc(v); }
+    return '<div class="scroll-x"><table class="t"><thead><tr>' + cols.map(function (c) { return "<th>" + esc(label(c)) + "</th>"; }).join("") + "</tr></thead><tbody>" +
+      rows.slice(0, cap || rows.length).map(function (r) { return "<tr>" + cols.map(function (c) { return "<td>" + cell(r[c]) + "</td>"; }).join("") + "</tr>"; }).join("") + "</tbody></table></div>";
+  }
+
+  /* alerts: never hidden behind Details (SKILL §7) */
+  function alerts(D, now, ctx) {
+    var sy = syncInfo(D, now, ctx && ctx.fetchErr), out = [], P = PM(D), probs = arr(obj(sy.consistency).problems);
+    var valFail = (sy.state === "FAILED" && /VALIDATION FAILED|ValidationFailed/i.test(String(sy.error || ""))) || arr(obj(P.validation).severe).length > 0;
+    if (valFail) out.push({ cls: "failed", title: "VALIDATION FAILED", msg: "The source failed validation; the figures below are the last verified snapshot, not the current state. " + (sy.error ? "Error: " + sy.error : arr(obj(P.validation).severe).join("; ")) });
+    else if (sy.state === "FAILED") out.push({ cls: "failed", title: "Sync FAILED", msg: (sy.error ? "Sync error: " + sy.error + ". " : "") + sy.problems.join(" ") });
+    if (sy.state === "STALE") out.push({ cls: "stale", title: "STALE", msg: "This snapshot is not current. " + sy.problems.join(" ") });
+    if (obj(P.reconciliation).ok === false) out.push({ cls: "failed", title: "RECONCILIATION FAILED", msg: "Exclusive status buckets do not add up to the executable count." });
+    var mm = probs.filter(function (p) { return /SOURCE MISMATCH/i.test(p); }).map(String);
+    var regSha = obj(obj(P.sources).register).sha256, regPath = obj(obj(P.sources).register).path;
+    if (regSha) {
+      arr(obj(obj(D.meta).sync).sources).forEach(function (s) { if (s && s.path === regPath && s.sha256 && s.sha256 !== regSha) mm.push("meta.sync source hash " + String(s.sha256).slice(0, 12) + " ≠ pm source hash " + String(regSha).slice(0, 12) + "."); });
+      var fsha = obj(FC(D).adapter).register_sha256; if (fsha && fsha !== regSha) mm.push("forecast was computed from register " + String(fsha).slice(0, 12) + ", pm from " + String(regSha).slice(0, 12) + ".");
+    }
+    if (mm.length) out.push({ cls: "failed", title: "SOURCE MISMATCH", msg: "The rendered data does not come from a single source revision. " + mm.join(" ") });
+    return out;
+  }
+  function provLine(D, now) {
+    var P = PM(D), s = obj(P.sources), sy = obj(obj(D.meta).sync), rec = obj(P.reconciliation);
+    var when = s.generated_at || sy.last_success, rev = obj(s.register).revision;
+    return "Updated " + (fmtDT(when) ? esc(fmtDT(when)) + ' <span class="dim">(' + esc(ago(when, now)) + ")</span>" : nr()) + " · source " + (rev ? '<span class="mono">' + esc(rev) + "</span>" : nr()) +
+      " · reconciliation " + (rec.ok === true ? tag("OK") : rec.ok === false ? tag("FAIL") : nr()) + " · validation " + (s.validation ? tag(s.validation) : nr());
+  }
+
+  /* ---- Mission Control / Overview ---- */
+  function topImpact(D) {
+    return arr(PM(D).dependency_impact).slice().sort(function (a, b) {
+      return arr(b.exclusively_blocked).length - arr(a.exclusively_blocked).length || (arr(b.direct).length + arr(b.transitive).length) - (arr(a.direct).length + arr(a.transitive).length);
+    });
+  }
+  function nextMilestone(D) {
+    var groups = {}; arr(obj(PM(D).reconciliation).groups).forEach(function (g) { groups[g.group] = g; });
+    var ms = arr(PM(D).milestones); for (var i = 0; i < ms.length; i++) { var g = groups[ms[i].id]; if (!g || obj(g.counts).DONE !== g.executable) return { m: ms[i], g: g }; }
+    return null;
+  }
+  function vMission(D, now, ctx) {
+    if (!built(D)) { var o = vOverview(D, now, ctx); o.cards.unshift(notBuilt(D, "mc-none", "Mission Control")); return o; }
+    var P = PM(D), M = obj(P.metrics), den = obj(M.denominator).launch_executable, F = FC(D), out = [];
+    var openBl = arr(P.blockers).filter(function (b) { return b.open; }), ac = obj(P.action_center), cards = arr(ac.cards);
+    var ready = cards.filter(function (c) { return c["class"] === "READY"; }), waiting = cards.filter(function (c) { return c["class"] === "WAITING"; });
+    var etcB = obj(obj(F.effort).ETC_total).b, fst = fcEngine(F) ? F.status : NR, nMiss = arr(F.missing_inputs).length;
+    var done = obj(M.done), tr = obj(M.technical_ready), rb = obj(M.remaining_base);
+    var sentence = "DONE " + esc(isNR(done.count) ? NR : done.count) + " of " + esc(den) + " launch tasks (" + esc(done.pct) + " %); " + esc(tr.count) + " technically ready (" + esc(tr.pct) + " %), of which " + esc(obj(M.awaiting_acceptance).count) + " await acceptance. " +
+      esc(ready.length) + " decision" + (ready.length === 1 ? " is" : "s are") + " ready for the Director; " + esc(openBl.length) + " blocker" + (openBl.length === 1 ? " is" : "s are") + " open. " +
+      (fst === "VALIDATED" || fst === "PROVISIONAL" ? "Delivery forecast " + esc(fst) + "." : "No delivery date is forecast: " + esc(fst) + (nMiss ? " (" + nMiss + " missing inputs)." : "."));
+    var health = obj(D.health).value;
+    out.push(card("mc-hero", P.project ? (obj(P.project).name || String(P.project)) : "Mission Control",
+      '<p class="lead">' + sentence + "</p>" + (health ? '<div class="row small">Health rule ' + tag(health) + ' <span class="dim">(rule-based; see Blockers)</span></div>' : "") +
+      '<div class="kpis six" style="margin-top:12px">' +
+      kpi(isNR(done.pct) ? NR : done.pct + " %", "DONE", esc(done.count) + " / " + esc(den) + " launch tasks", col("DONE")) +
+      kpi(isNR(tr.pct) ? NR : tr.pct + " %", "Technically ready", "separate from DONE · " + esc(tr.count) + " / " + esc(den), col("QA_PASS")) +
+      kpi(isNR(rb.known_subtotal) ? NR : rb.known_subtotal, "Remaining (known subtotal)", esc(rb.unit || "") + " · " + esc(rb.missing_estimates) + " estimates missing", col("IN_PROGRESS")) +
+      kpi(openBl.length, "Active blockers", "open gates/decisions/risks", col("BLOCKED")) +
+      kpi(num(etcB) != null ? etcB + " h" : fst, "ETC base", num(etcB) != null ? "person-hours" : nMiss + " missing inputs", num(etcB) != null ? col("IN_PROGRESS") : col("HOLD")) +
+      kpi(fst, "Forecast status", fcEngine(F) ? "confidence: " + (obj(F.percentiles).status === "AVAILABLE" ? "calibrated" : "no calibrated percentiles") : "forecast engine not published", col(fst)) +
+      "</div>" + '<p class="foot">' + provLine(D, now) + ' · <a href="#sources">Details</a></p>', { cls: "span-all hero" }));
+    var top = topImpact(D)[0], bm = {}; arr(P.blockers).forEach(function (b) { bm[b.id] = b; });
+    var drv = F.top_schedule_driver;
+    out.push(card("mc-bottleneck", "Current bottleneck", top ?
+      '<div class="row">' + tag(obj(bm[top.id]).priority || NR) + ' <b class="mono">' + esc(top.id) + "</b> " + esc(obj(bm[top.id]).title || "") + "</div>" +
+      kv([["Owner", val(top.owner_code)], ["Removes it", val(top.next_action)], ["Direct", esc(arr(top.direct).length) + " tasks"], ["Transitive", esc(arr(top.transitive).length) + " tasks"],
+          ["Unlocked at once", ids(top.immediately_unlockable)], ["Still blocked by others", esc(arr(top.multiply_blocked).length) + " tasks"]]) +
+      '<p class="note">Ranked by dependency impact (graph reachability; not a critical path). ' + (drv ? "Forecast schedule driver: " + esc(drv.type === "missing_input" ? "missing input — " + (drv.reason || "") + (drv.count ? " (" + drv.count + ")" : "") : (drv.task || "") + " " + (drv.wait_reason || "")) : "") + '</p><a class="btn small" href="#blockers">All blockers</a>'
+      : '<p class="empty">No open blocker with dependency impact recorded.</p>', { right: top ? docBtn(top.doc) : "" }));
+    out.push(card("mc-actions", "Director actions required now (" + ready.length + ")", list(ready.slice(0, 4), function (c) {
+      return '<li><div class="row sb"><span class="row">' + tag("READY") + ' <b class="mono">' + esc(c.id) + "</b></span>" + tag(c.approval_scope) + "</div><div>" + esc(c.question) + '</div><div class="small muted">Recommendation: ' + val(c.recommendation) + "</div></li>";
+    }, "No decision is ready now.") + '<p class="note">' + esc(waiting.length) + " waiting for evidence/dependency · " + esc(obj(ac.counts).FUTURE || 0) + ' future (not actionable yet).</p><a class="btn small" href="#actions">Open Action Center</a>'));
+    var act = arr(P.workers).filter(function (w) { return arr(w.active).length; }), nm = nextMilestone(D);
+    out.push(card("mc-workers", "Active workers & next milestone",
+      list(act, function (w) { return '<li><div class="row sb"><b>' + esc(w.role || w.id) + "</b><span class=\"small dim\">capacity " + val(w.capacity_h_per_week) + "</span></div><div>" + ids(w.active) + "</div></li>"; }, "No worker has an active task recorded.") +
+      (nm ? '<div class="ms-next"><div class="row">' + tag("NEXT MILESTONE") + ' <b class="mono">' + esc(nm.m.id) + "</b> " + esc(nm.m.name || "") + '</div><div class="small muted">Target ' + val(nm.m.target) + " · exit: " + val(nm.m.exit) + "</div>" +
+        (nm.g ? stackBar(nm.g.counts, bucketsOf(D), 10) + '<div class="small dim">' + esc(nm.g.equation) + "</div>" : "") + "</div>" : '<p class="empty">No open milestone recorded.</p>'),
+      { right: '<a class="btn small" href="#workers">Workers</a>' }));
+    return { title: "Mission Control", sub: "Are we on track? Health, primary KPIs, bottleneck and the decisions needed now", cards: out, grid: "grid two" };
+  }
+
+  /* ---- Action Center ---- */
+  function decisionCard(c) {
+    var why = c["class"] === "READY" ? "Brief complete and prerequisites met." : c["class"] === "WAITING" ? "Not actionable yet: missing item or unfinished prerequisite." : "Later phase: a prerequisite is itself waiting.";
+    var notAuth = c.approval_scope === "UNQUALIFIED" ? "Any downstream GO — no scope qualifier is recorded, so approval authorizes only the recorded option." : (c.not_authorized || NR);
+    return '<li class="dcard"><div class="row sb"><span class="row">' + tag(c["class"]) + ' <b class="mono">' + esc(c.id) + "</b></span><span class=\"row\">" + tag(c.status) + tag(c.approval_scope) + "</span></div>" +
+      '<div class="q">' + esc(c.question) + "</div>" +
+      kv([["Decided by", val(c.authority)], ["Why now", esc(why)], ["Recommendation", val(c.recommendation)], ["Alternatives", val(c.options)],
+          ["Authorized", val(c.authorizes)], ["NOT authorized", esc(notAuth)],
+          ["Executable at once", ids(c.immediately_unlockable)], ["Transitively affected", ids(c.transitively_affected)], ["Still blocked after", ids(c.remains_blocked_after)],
+          ["If delayed", val(c.if_delayed)]].concat(arr(c.missing).length ? [["Missing", arr(c.missing).map(function (m) { return esc(m.item) + ' <span class="dim">— owner ' + esc(m.owner || NR) + "</span>"; }).join("<br>")]] : [])) +
+      '<div class="row">' + docBtn(c.src || c.evidence, "Source") + "</div></li>";
+  }
+  function vActions(D, now, ctx) {
+    if (!built(D)) return { title: "Action Center", sub: "", cards: [notBuilt(D, "ac-none", "Action Center")], grid: "grid" };
+    var ac = obj(PM(D).action_center), cards = arr(ac.cards), out = [];
+    out.push(card("ac-k", "Decisions by readiness", '<div class="kpis">' + kpi(obj(ac.counts).READY, "READY for decision", "", col("READY")) + kpi(obj(ac.counts).WAITING, "WAITING (evidence/dependency)", "", col("HOLD")) +
+      kpi(obj(ac.counts).FUTURE, "FUTURE (not actionable)", "", col("PLANNED")) + kpi(arr(ac.approved).length, "Approved (register)", "see Decisions", col("DIRECTOR_ACCEPTED")) + "</div>" +
+      (arr(ac.problems).length ? list(ac.problems, function (p) { return '<li class="small t-warn">' + esc(p) + "</li>"; }) : "") + more("ac:rule", "Classification rule", "<p>" + val(ac.rule) + "</p>", ctx), { cls: "span-all" }));
+    [["READY", "READY for decision"], ["WAITING", "WAITING for evidence / dependency"], ["FUTURE", "FUTURE / not actionable"]].forEach(function (k) {
+      var cs = cards.filter(function (c) { return c["class"] === k[0]; }), key = "ac:" + k[0], cap = k[0] === "READY" ? 6 : 3;
+      out.push(card("ac-" + k[0], k[1] + " (" + cs.length + ")", list(ctx.ui.open[key] ? cs : cs.slice(0, cap), decisionCard, "None.") +
+        (cs.length > cap ? '<button class="btn small" type="button" data-toggle="' + key + '">' + (ctx.ui.open[key] ? "Show fewer" : "Show all " + cs.length) + "</button>" : ""), { cls: "span-all" }));
+    });
+    return { title: "Action Center", sub: "What does the Director need to decide today? Only READY items are actionable", cards: out, grid: "grid" };
+  }
+
+  /* ---- Workers / Capacity ---- */
+  function vWorkers(D, now, ctx) {
+    var out = [];
+    if (built(D)) {
+      var P = PM(D);
+      out.push(card("wk-tab", "Assignments & capacity", '<div class="scroll-x"><table class="t"><thead><tr><th>Worker</th><th>Capacity h/week</th><th>Concurrency</th><th>Active</th><th>Awaiting acceptance</th><th>Queue (eligible)</th><th>Blocked / hold</th><th>Waiting on dependency</th><th>Utilization</th></tr></thead><tbody>' +
+        arr(P.workers).map(function (w) { return "<tr><td><b>" + esc(w.role || w.id) + '</b><div class="dim small mono">' + esc(arr(w.register_codes).join(", ")) + "</div></td><td>" + (isNR(w.capacity_h_per_week) ? tag("UNKNOWN") : esc(w.capacity_h_per_week)) + "</td><td>" + (w.concurrency_cap == null ? tag("UNKNOWN") : esc(w.concurrency_cap)) +
+          "</td><td>" + ids(w.active, 6) + "</td><td>" + ids(w.awaiting_acceptance, 6) + "</td><td>" + ids(w.queue_eligible, 6) + "</td><td>" + ids(w.blocked_or_hold, 6) + "</td><td>" + ids(w.waiting_on_dependency, 6) + "</td><td>" + val(w.utilization) + "</td></tr>"; }).join("") + "</tbody></table></div>" +
+        '<p class="note">Capacity not recorded in the project config is shown as UNKNOWN; utilization is never estimated from it.</p>', { cls: "span-all" }));
+      out.push(card("wk-locks", "Shared resource locks", list(P.locks, function (l) { return '<li><div class="row sb"><b>' + esc(l.name || l.id) + "</b>" + tag(l.state) + '</div><div class="small">Capacity ' + val(l.capacity) + " · last event " + dateCell(l.last_event_at) + '</div><div class="small dim">' + esc(l.source || "") + (l.note ? " · " + esc(l.note) : "") + "</div></li>"; }, "No shared resource recorded.")));
+      out.push(card("wk-queue", "Eligible now (queue)", "<div>" + ids(P.eligible_now, 40) + '</div><p class="note">Unstarted tasks whose prerequisites are all met. A view only: no status is changed.</p>'));
+    } else out.push(notBuilt(D, "wk-none", "Workers"));
+    var r = vResources(D, now, ctx); out = out.concat(r.cards);
+    return { title: "Workers & capacity", sub: "Who is doing what, shared locks and the queue", cards: out, grid: "grid two" };
+  }
+
+  /* ---- Decisions / Gates ---- */
+  function vDecisions(D, now, ctx) {
+    if (!built(D)) return { title: "Decisions & gates", sub: "", cards: [notBuilt(D, "dg-none", "Decisions")], grid: "grid" };
+    var P = PM(D), au = obj(P.authorizations), ap = arr(obj(P.action_center).approved), out = [];
+    out.push(card("dg-grants", "Scoped GO grants", genericTable(au.grants) + '<p class="note">Qualifiers: ' + arr(au.qualifiers).map(tag).join(" ") + ". A GO without a qualifier authorizes nothing downstream.</p>", { cls: "span-all" }));
+    out.push(card("dg-not", "Not granted", genericTable(au.not_granted)));
+    out.push(card("dg-holds", "Holds", genericTable(au.holds)));
+    var showAll = ctx.ui.open["dg:all"];
+    out.push(card("dg-reg", "Decision register (" + ap.length + ")", '<div class="scroll-x"><table class="t"><thead><tr><th>ID</th><th>Topic</th><th>Status</th><th>GO scope</th><th>Authorized</th><th>Not authorized</th><th>Source</th></tr></thead><tbody>' +
+      (showAll ? ap : ap.slice(0, 12)).map(function (a) { return '<tr><td class="mono">' + esc(a.id) + "</td><td>" + esc(a.topic) + "</td><td>" + tag(a.status) + "</td><td>" + tag(a.qualifier) + "</td><td>" + val(a.authorized_scope) + "</td><td>" + val(a.not_authorized) + "</td><td>" + docBtn(a.src, "Source") + "</td></tr>"; }).join("") +
+      "</tbody></table></div>" + (ap.length > 12 ? '<button class="btn small" type="button" data-toggle="dg:all">' + (showAll ? "Show fewer" : "Show all " + ap.length) + "</button>" : ""), { cls: "span-all" }));
+    var hist = arr(D.activity).filter(function (a) { return a.kind === "decision"; }).concat(arr(P.events).filter(function (e) { var n = nodeMap(D)[e.ref]; return n && (n.node_type === "DECISION" || n.node_type === "GATE"); }).map(function (e) { return { at: e.at, ref: e.ref, summary: e.field + ": " + e.from + " → " + e.to }; }));
+    out.push(card("dg-hist", "History", list(hist.slice(0, 20), function (h) { return '<li class="small"><b class="mono">' + esc(h.ref || "") + "</b> " + esc(h.summary || "") + ' <span class="dim">' + esc(fmtDT(h.at) || "") + "</span></li>"; }, "No decision change recorded since history started."), { cls: "span-all" }));
+    return { title: "Decisions & gates", sub: "What is approved, with the exact GO scope", cards: out, grid: "grid two" };
+  }
+
+  /* ---- Milestones / Progress ---- */
+  function vMilestones(D, now, ctx) {
+    if (!built(D)) return { title: "Milestones & progress", sub: "", cards: [notBuilt(D, "mp-none", "Progress")], grid: "grid" };
+    var P = PM(D), M = obj(P.metrics), rec = obj(P.reconciliation), B = bucketsOf(D), out = [], mm = {};
+    arr(P.milestones).forEach(function (m) { mm[m.id] = m; });
+    var groups = arr(rec.groups), uiOk = groups.every(function (g) { return B.reduce(function (a, k) { return a + (num(obj(g.counts)[k]) || 0); }, 0) === g.executable; });
+    var ew = obj(M.effort_weighted_done);
+    out.push(card("mp-k", "Progress (launch scope)", '<div class="kpis six">' + kpi(obj(M.denominator).launch_executable, "Executable launch tasks", "", "#b3badf") + kpi(obj(M.done).count, "DONE", esc(obj(M.done).pct) + " %", col("DONE")) +
+      kpi(obj(M.technical_ready).count, "Technically ready", esc(obj(M.technical_ready).pct) + " %", col("QA_PASS")) + kpi(obj(M.awaiting_acceptance).count, "Awaiting acceptance", "", col("DIRECTOR_ACCEPTED")) +
+      kpi(M.missing_work_estimates, "Missing work estimates", "UNKNOWN, not zero", col("HOLD")) + kpi(M.intentional_zero_effort_rows, "Zero-effort decision/gate rows", "intentional", "#b3badf") + "</div>" +
+      '<p class="foot">Effort-weighted DONE ' + val(ew.pct, function (x) { return x + " %"; }) + " (coverage " + val(ew.coverage_tasks) + ") · reconciliation " + tag(rec.ok ? "OK" : "FAIL") + " · UI re-check " + tag(uiOk ? "OK" : "FAIL") + "</p>" +
+      more("mp:def", "Definitions", kv([["Denominator", val(obj(M.denominator).rule)], ["DONE rule", esc(JSON.stringify(obj(P.status_mapping).done_rule))], ["Technical readiness", esc(arr(obj(M.technical_ready).buckets).join(" + "))],
+        ["Remaining", val(obj(M.remaining_base).note)], ["Buckets", esc(B.join(" · ")) + " (mutually exclusive)"]]), ctx), { cls: "span-all" }));
+    out.push(card("mp-groups", "Exclusive buckets per milestone", '<div class="scroll-x"><table class="t"><thead><tr><th>Group</th><th>Breakdown</th><th class="num">Executable</th><th>Equation</th><th>Check</th></tr></thead><tbody>' +
+      groups.map(function (g) { var m = mm[g.group]; return "<tr><td><b class=\"mono\">" + esc(g.group) + "</b>" + (m ? '<div class="small">' + esc(m.name || "") + '</div><div class="dim small">target ' + esc(m.target || NR) + "</div>" : "") + '</td><td style="min-width:180px">' + stackBar(g.counts, B, 12) + legend(g.counts, B) + '</td><td class="num">' + esc(g.executable) + '</td><td class="mono small">' + esc(g.equation) + "</td><td>" + tag(g.ok ? "OK" : "FAIL") + "</td></tr>"; }).join("") +
+      "</tbody></table></div>", { cls: "span-all" }));
+    var rs = obj(rec.reported_separately);
+    out.push(card("mp-sep", "Reported separately (not in the launch denominator)", kv(Object.keys(rs).map(function (k) { return [label(k) + " (" + arr(rs[k]).length + ")", ids(rs[k], 20)]; }).concat([["Containers not counted", ids(rec.containers_not_counted, 20)]])), { cls: "span-all" }));
+    return { title: "Milestones & progress", sub: "Mutually exclusive buckets; every total reconciles to the executable count", cards: out, grid: "grid" };
+  }
+
+  /* ---- Timeline / Forecast ---- */
+  function vForecast(D, now, ctx) {
+    var F = FC(D), out = [], P = PM(D);
+    if (!fcEngine(F)) { out.push(card("fc-none", "Forecast", "<p>forecast engine output " + nr() + ' — this snapshot predates the forecast wiring.</p><p class="note">Uncalibrated v1 projections are not shown as P50/P80.</p>', { cls: "span-all" })); return { title: "Timeline & forecast", sub: "", cards: out, grid: "grid" }; }
+    var sc = obj(F.scenarios), mi = arr(F.missing_inputs), cov = obj(F.coverage), ef = obj(F.effort);
+    function scen(k) { var s = obj(sc[k]), l = obj(s.launch); return "<tr><td><b>" + esc(label(k)) + "</b></td><td>" + tag(s.status || NR) + "</td><td>" + (l.finish ? dateCell(l.finish) : tag(l.status || s.status || NR)) + '</td><td class="num">' + (num(l.working_days) != null ? esc(l.working_days) : nr()) + "</td></tr>"; }
+    out.push(card("fc-status", "Delivery forecast", '<div class="row">' + tag(F.status) + ' <span class="small muted">as of ' + dateCell(F.as_of) + " · " + esc(F.scheduling_mode || "") + "</span></div>" +
+      (F.status === "INSUFFICIENT_DATA" ? '<p class="lead t-warn">No delivery date is forecast: ' + mi.length + " required inputs are missing. Nothing is estimated in their place.</p>" : "") +
+      '<div class="scroll-x"><table class="t"><thead><tr><th>Scenario</th><th>Status</th><th>Launch finish</th><th class="num">Working days</th></tr></thead><tbody>' + ["optimistic", "base", "conservative"].map(scen).join("") + "</tbody></table></div>" +
+      '<p class="foot">Percentiles ' + tag(obj(F.percentiles).status || NR) + (obj(F.percentiles).reason ? " — " + esc(obj(F.percentiles).reason) : "") + " · P50/P80 are shown only when calibrated.</p>", { cls: "span-all" }));
+    var showMi = ctx.ui.open["fc:mi"];
+    out.push(card("fc-missing", "Missing inputs (" + mi.length + ")", list(showMi ? mi : mi.slice(0, 10), function (m) { return '<li class="small"><span class="mono">' + esc(m.input) + "</span> — " + esc(m.reason) + "</li>"; }, "None.") +
+      (mi.length > 10 ? '<button class="btn small" type="button" data-toggle="fc:mi">' + (showMi ? "Show fewer" : "Show all " + mi.length) + "</button>" : "")));
+    out.push(card("fc-cov", "Estimate coverage & effort", kv([["Unfinished work", val(cov.unfinished_work)], ["With ETC", val(cov.with_etc)], ["Missing ETC", val(cov.missing_etc)], ["Coverage", val(cov.coverage_task_pct, function (x) { return x + " %"; })],
+      ["Known ETC base", val(cov.known_etc_base_h, function (x) { return x + " h"; })], ["ETC o / b / c", ["o", "b", "c"].map(function (k) { return val(obj(ef.ETC_total)[k]); }).join(" / ")], ["Actual cost (AC)", val(ef.AC_total)],
+      ["Machine hours (actual)", val(obj(ef.machine_h).actual)], ["Gates with unknown latency", val(ef.gates_unknown_latency)]]) + (cov.note ? '<p class="note">' + esc(cov.note) + "</p>" : "")));
+    var base = obj(sc.base), bms = obj(base.milestones), sv = obj(F.schedule_variance);
+    out.push(card("fc-ms", "Baseline vs current milestones", '<div class="scroll-x"><table class="t"><thead><tr><th>Milestone</th><th>Baseline target</th><th>Current (base scenario)</th><th>Exit criterion</th></tr></thead><tbody>' +
+      arr(P.milestones).map(function (m) { var c = obj(bms[m.id]); return '<tr><td><b class="mono">' + esc(m.id) + "</b> " + esc(m.name || "") + "</td><td>" + val(m.target) + "</td><td>" + (c.finish ? dateCell(c.finish) : tag(c.status || base.status || NR)) + '</td><td class="small">' + val(m.exit) + "</td></tr>"; }).join("") +
+      '</tbody></table></div><p class="foot">Schedule variance ' + tag(sv.status || "NOT_COMPUTED") + (num(sv.schedule_variance_days) != null ? " " + esc(sv.schedule_variance_days) + " days" : "") + "</p>", { cls: "span-all" }));
+    var dc = obj(base.launch).driving_chain;
+    out.push(card("fc-chain", "Driving chain (resource-constrained schedule)", Array.isArray(dc) && dc.length ? '<ol class="chain">' + dc.map(function (s) { return '<li><button class="idlink" type="button" data-node="' + esc(s.task) + '">' + esc(s.task) + '</button> <span class="dim small">' + esc(s.link || "") + " · " + esc(fmtDT(s.start) || "") + " → " + esc(fmtDT(s.finish) || "") + "</span></li>"; }).join("") + "</ol>"
+      : '<p class="empty">Not scheduled (' + esc(base.status || NR) + '): no driving chain can be named. Dependency reachability is shown under Blockers and is not a critical path.</p>'));
+    var ad = obj(F.adapter);
+    out.push(card("fc-method", "Methodology & provenance", more("fc:flags", "Flags (" + arr(F.flags).length + ")", list(arr(F.flags).slice(0, 60), function (f) { return '<li class="small"><span class="mono">' + esc(f.task || "") + "</span> " + tag(f.flag) + " " + esc(f.detail || "") + "</li>"; }), ctx) +
+      more("fc:map", "Unit mapping", kv(Object.keys(obj(ad.unit_mapping)).map(function (k) { return [k, esc(ad.unit_mapping[k])]; })), ctx) +
+      more("fc:runner", "Runner actuals", kv(Object.keys(obj(ad.runner)).map(function (k) { return [label(k), val(ad.runner[k])]; })), ctx) +
+      '<p class="foot">Method ' + val(F.method) + " · config " + val(F.config) + " · register " + (ad.register_sha256 ? '<span class="mono">' + esc(String(ad.register_sha256).slice(0, 12)) + "</span>" : nr()) + (F.legacy_v1 ? " · v1 projection " + tag(obj(F.legacy_v1).label) + " (not displayed)" : "") + "</p>", { cls: "span-all" }));
+    return { title: "Timeline & forecast", sub: "When can we deliver? O/B/C scenarios only from recorded inputs", cards: out, grid: "grid two" };
+  }
+
+  /* ---- Blockers / Risks ---- */
+  function vRisks(D, now, ctx) {
+    var out = [];
+    if (built(D)) {
+      var P = PM(D), bm = {}, rank = topImpact(D); arr(P.blockers).forEach(function (b) { bm[b.id] = b; });
+      out.push(card("rk-rank", "Ranked by dependency impact (" + rank.length + ")", '<p class="note">Graph reachability: direct and transitive tasks, tasks this item alone unlocks, and tasks that stay blocked by something else. Not a critical path.</p>' +
+        '<div class="scroll-x"><table class="t"><thead><tr><th>#</th><th>Blocker</th><th>Owner</th><th class="num">Direct</th><th class="num">Transitive</th><th>Unlocks at once</th><th>Exclusively blocked</th><th>Multiply blocked</th><th>Unlock action</th></tr></thead><tbody>' +
+        rank.map(function (r, i) { var b = obj(bm[r.id]); return '<tr><td class="num">' + (i + 1) + '</td><td><b class="mono">' + esc(r.id) + "</b> " + tag(b.priority || NR) + '<div class="small">' + esc(b.title || "") + '</div><div class="small dim">' + esc(b.node_type || "") + " · " + esc(b.edge_type || "") + "</div></td><td>" + val(r.owner_code) + '</td><td class="num">' + arr(r.direct).length + '</td><td class="num">' + arr(r.transitive).length +
+          "</td><td>" + ids(r.immediately_unlockable, 5) + "</td><td>" + ids(r.exclusively_blocked, 5) + "</td><td>" + (arr(r.multiply_blocked).length ? arr(r.multiply_blocked).slice(0, 4).map(function (m) { return '<button class="idlink" type="button" data-node="' + esc(m.id) + '">' + esc(m.id) + '</button> <span class="dim small">also ' + esc(arr(m.other_blockers).join(", ")) + "</span>"; }).join("<br>") : '<span class="dim">none</span>') +
+          '</td><td class="small">' + val(r.next_action) + "<br>" + docBtn(r.doc) + "</td></tr>"; }).join("") + "</tbody></table></div>", { cls: "span-all" }));
+      var open = arr(P.blockers).filter(function (b) { return b.open; });
+      out.push(card("rk-open", "Open gates, decisions & risks (" + open.length + ")", list(open, function (b) { return '<li><div class="row sb"><span class="row">' + tag(b.priority || NR) + ' <b class="mono">' + esc(b.id) + "</b> " + tag(b.node_type) + "</span>" + docBtn(b.doc) + "</div><div>" + esc(b.title) + '</div><div class="small muted">Owner ' + val(b.owner_code) + " · blocks " + ids(b.targets, 6) + " · identified " + val(b.identified) + '</div><div class="small">Next: ' + val(b.next_action) + "</div></li>"; }, "No open blocker.")));
+    } else out.push(notBuilt(D, "rk-none", "Blockers"));
+    var old = vBlockers(D, now, ctx).cards.filter(function (c) { return c.key === "bl-health" || c.key === "bl-res"; });
+    return { title: "Blockers & risks", sub: "What threatens progress, ranked by dependency impact", cards: out.concat(old), grid: "grid two" };
+  }
+
+  /* ---- Tracker / Workstreams ---- */
+  var TRK_CAP = 25;
+  function trkFilter(D, ui) {
+    var q = String(ui.q || "").toLowerCase().trim(), f = obj(ui.f);
+    return nodes(D).filter(function (n) {
+      if (f.bucket && (n.bucket || n.scope) !== f.bucket) return false;
+      if (f.ws && n.workstream !== f.ws) return false;
+      if (f.ms && String(n.milestone) !== f.ms) return false;
+      if (q && [n.id, n.title, n.status, n.bucket, n.workstream, n.milestone, n.owner_code, n.worker, n.batch].join(" ").toLowerCase().indexOf(q) < 0) return false;
+      return true;
+    });
+  }
+  function opts(vals, all) { return '<option value="">' + esc(all) + "</option>" + vals.map(function (v) { return '<option value="' + esc(v) + '">' + esc(label(v)) + "</option>"; }).join(""); }
+  function uniq(a) { var s = []; a.forEach(function (x) { if (x != null && x !== "" && s.indexOf(String(x)) < 0) s.push(String(x)); }); return s.sort(); }
+  function vTracker(D, now, ctx) {
+    var out = [];
+    if (!built(D)) { var w = vWorkstreams(D, now, ctx); return { title: "Tracker & workstreams", sub: w.sub, cards: [notBuilt(D, "tr-none", "Tracker")].concat(w.cards), grid: w.grid }; }
+    var N = nodes(D), B = bucketsOf(D), ui = ctx.ui;
+    var bks = uniq(N.map(function (n) { return n.bucket || n.scope; })).sort(function (a, b) { return (B.indexOf(a) < 0 ? 99 : B.indexOf(a)) - (B.indexOf(b) < 0 ? 99 : B.indexOf(b)); });
+    out.push(card("tr-ctl", "Search & filter", '<div class="filters"><label class="fld"><span>Search</span><input id="trk-q" type="search" autocomplete="off" placeholder="ID, title, owner…" aria-label="Search tasks"></label>' +
+      '<label class="fld"><span>Bucket</span><select data-f="bucket" aria-label="Filter by bucket">' + opts(bks, "All buckets") + "</select></label>" +
+      '<label class="fld"><span>Workstream</span><select data-f="ws" aria-label="Filter by workstream">' + opts(uniq(N.map(function (n) { return n.workstream; })), "All workstreams") + "</select></label>" +
+      '<label class="fld"><span>Milestone</span><select data-f="ms" aria-label="Filter by milestone">' + opts(uniq(N.map(function (n) { return n.milestone; })), "All milestones") + "</select></label></div>", { cls: "span-all" }));
+    var rows = trkFilter(D, ui), all = ui.open["tr:all"], shown = all ? rows : rows.slice(0, TRK_CAP);
+    out.push(card("tr-res", "Canonical tasks", '<p class="small muted" aria-live="polite">Showing ' + shown.length + " of " + rows.length + " matching (" + N.length + " nodes in the register)</p>" +
+      '<div class="scroll-x"><table class="t trk"><thead><tr><th>ID</th><th>Title</th><th>Bucket</th><th>Status</th><th>Workstream</th><th>Milestone</th><th>Owner</th><th>Scope</th></tr></thead><tbody>' +
+      shown.map(function (n) { return '<tr><td><button class="idlink" type="button" data-node="' + esc(n.id) + '" aria-label="Details ' + esc(n.id) + '">' + esc(n.id) + "</button></td><td>" + esc(n.title) + "</td><td>" + tag(n.bucket || n.scope) + "</td><td>" + tag(n.status) + "</td><td>" + val(n.workstream) + "</td><td>" + val(n.milestone) + "</td><td>" + val(n.owner_code) + "</td><td>" + tag(n.scope) + "</td></tr>"; }).join("") +
+      "</tbody></table></div>" + (rows.length > TRK_CAP ? '<button class="btn small" type="button" data-toggle="tr:all">' + (all ? "Show first " + TRK_CAP : "Show all " + rows.length) + "</button>" : ""), { cls: "span-all" }));
+    var ws = workstreams(D).list;
+    out.push(card("tr-ws", "Workstreams (" + ws.length + ")", list(ws, function (w) { var c = obj(w.counts); return '<li><div class="row sb"><b>' + esc(w.name || w.id) + '</b><span class="small dim">' + esc(w.total != null ? w.total : arr(w.tasks).length) + " tasks</span></div>" + stackBar(c, Object.keys(c), 8) + legend(c, Object.keys(c)) + "</li>"; }), { cls: "span-all" }));
+    return { title: "Tracker & workstreams", sub: "Searchable canonical task register; open any row for the detail drawer", cards: out, grid: "grid" };
+  }
+  function nodeDetail(D, id) {
+    var n = nodeMap(D)[id]; if (!n) return '<p class="empty">' + esc(id) + " is not a node in this snapshot.</p>";
+    var P = PM(D), bl = arr(P.blockers).filter(function (b) { return arr(b.targets).indexOf(id) >= 0; }), dependents = nodes(D).filter(function (x) { return arr(x.deps).indexOf(id) >= 0; }).map(function (x) { return x.id; });
+    var ac = obj(n.acceptance), ev = arr(P.events).filter(function (e) { return e.ref === id; });
+    return "<h2>" + esc(n.title) + "</h2>" + '<div class="row">' + tag(n.bucket) + tag(n.status) + tag(n.scope) + tag(n.node_type) + "</div>" +
+      kv([["Kind", val(n.kind)], ["Batch", val(n.batch)], ["Milestone", val(n.milestone)], ["Workstream", val(n.workstream)], ["Owner", val(n.owner_code) + " · " + val(n.worker)], ["Lifecycle", val(n.lifecycle)], ["Visual", tag(n.visual)],
+        ["Estimate base / conservative", val(n.est_base) + " / " + val(n.est_conservative)], ["Depends on", ids(n.deps, 30)], ["Dependents", ids(dependents, 30)], ["Blocked by", bl.length ? bl.map(function (b) { return esc(b.id) + " " + tag(b.open ? "OPEN" : "RESOLVED"); }).join("<br>") : '<span class="dim">none</span>'],
+        ["Scope reason", val(n.scope_reason)]]) +
+      "<h3>Acceptance dimensions</h3>" + kv(["technical", "visual", "director", "device", "release"].map(function (k) { return [label(k), tag(ac[k] || NR)]; })) +
+      "<h3>History</h3>" + list(ev, function (e) { return '<li class="small">' + esc(e.field) + ": " + esc(e.from) + " → " + esc(e.to) + ' <span class="dim">' + esc(fmtDT(e.at) || "") + "</span></li>"; }, "No change recorded since history started.") +
+      '<p class="row">' + docBtn(n.doc ? n.doc + (n.line ? "" : "") : null, "Open source doc") + "</p>";
+  }
+
+  /* ---- Quality / Acceptance ---- */
+  function vQuality(D, now, ctx) {
+    var out = [];
+    if (built(D)) {
+      var dims = ["technical", "visual", "director", "device", "release"], L = nodes(D).filter(function (n) { return n.scope === "LAUNCH" && n.executable; }), M = {}, vals = [];
+      dims.forEach(function (d) { M[d] = {}; L.forEach(function (n) { var v = obj(n.acceptance)[d] || NR; M[d][v] = (M[d][v] || 0) + 1; if (vals.indexOf(v) < 0) vals.push(v); }); });
+      out.push(card("qa-acc", "Acceptance dimensions (" + L.length + " launch tasks)", '<p class="note">Technical QA, visual, Director, device and release acceptance are distinct; one never implies another.</p>' +
+        list(dims, function (d) { return '<li><div class="row sb"><b>' + esc(label(d)) + "</b></div>" + stackBar(M[d], vals, 10) + legend(M[d], vals) + "</li>"; }) +
+        more("qa:dod", "Definition of done", kv([["DONE rule", esc(JSON.stringify(obj(PM(D).status_mapping).done_rule))], ["Accepted but not done", esc(JSON.stringify(obj(PM(D).status_mapping).accepted_not_done || NR))]]), ctx), { cls: "span-all" }));
+    }
+    return { title: "Quality & acceptance", sub: "What has been verified: QA rounds incl. regression locks, visual audits, acceptance per dimension", cards: out.concat(vQA(D, now, ctx).cards), grid: "grid two" };
+  }
+
+  /* ---- Sources / Audit ---- */
+  function vSources(D, now, ctx) {
+    var P = PM(D), s = obj(P.sources), sy = obj(obj(D.meta).sync), out = [], al = alerts(D, now, ctx);
+    function src(x) { x = obj(x); return kv([["Path", val(x.path)], ["Revision", x.revision ? '<span class="mono">' + esc(x.revision) + "</span>" : nr()], ["File state", tag(x.file_state || NR)], ["sha256", x.sha256 ? '<span class="mono">' + esc(x.sha256) + "</span>" : nr()]]); }
+    out.push(card("so-state", "Snapshot integrity", '<div class="row">' + (al.length ? al.map(function (a) { return tag(a.title.replace(/ /g, "_")); }).join(" ") : tag("OK") + ' <span class="small muted">no STALE / VALIDATION FAILED / SOURCE MISMATCH condition</span>') + "</div>" +
+      kv([["Generated at", dateCell(s.generated_at)], ["Sync state", tag(sy.state || NR)], ["Last success", dateCell(sy.last_success)], ["Trigger", val(sy.trigger)], ["Freshness SLA", val(s.freshness_sla_min || sy.stale_after_min, function (x) { return x + " min"; }) + ' <span class="dim small">' + esc(s.freshness_source || "") + "</span>"],
+        ["Validation", tag(s.validation || NR)], ["Reconciliation", tag(obj(P.reconciliation).ok === true ? "OK" : obj(P.reconciliation).ok === false ? "FAIL" : NR)], ["Contract", val(obj(D.meta).contract)], ["Skill / config version", val(P.skill_version) + " / " + val(P.config_version)]]), { cls: "span-all" }));
+    out.push(card("so-reg", "Canonical register", src(s.register)));
+    out.push(card("so-cfg", "Project config", src(s.config)));
+    var w = arr(obj(P.validation).warnings), pr = arr(obj(sy.consistency).problems);
+    out.push(card("so-val", "Validation warnings (" + w.length + ") & consistency problems (" + pr.length + ")", list(pr, function (p) { return '<li class="small t-warn">' + esc(p) + "</li>"; }, "No consistency problem.") + more("so:w", "Validation warnings", list(w, function (x) { return '<li class="small">' + esc(x) + "</li>"; }, "None."), ctx)));
+    out.push(card("so-unk", "Config UNKNOWNs (" + arr(P.config_unknowns).length + ")", list(P.config_unknowns, function (u) { return '<li class="small mono">' + esc(u) + "</li>"; }, "None.")));
+    out.push(card("so-files", "Published sources (" + arr(sy.sources).length + ")", '<div class="scroll-x"><table class="t"><thead><tr><th>Path</th><th>sha256</th><th>Modified</th></tr></thead><tbody>' +
+      arr(sy.sources).slice(0, ctx.ui.open["so:all"] ? 500 : 12).map(function (x) { return '<tr><td class="mono">' + esc(x.path) + '</td><td class="mono">' + esc(String(x.sha256 || "").slice(0, 16)) + "</td><td>" + (num(x.mtime) != null ? esc(fmtDT(new Date(x.mtime * 1000).toISOString())) : nr()) + "</td></tr>"; }).join("") + "</tbody></table></div>" +
+      (arr(sy.sources).length > 12 ? '<button class="btn small" type="button" data-toggle="so:all">' + (ctx.ui.open["so:all"] ? "Show fewer" : "Show all " + arr(sy.sources).length) + "</button>" : ""), { cls: "span-all" }));
+    out.push(card("so-log", "Change log (" + arr(P.events).length + ")", list(arr(P.events).slice(0, 30), function (e) { return '<li class="small"><b class="mono">' + esc(e.ref) + "</b> " + esc(e.field) + ": " + esc(e.from) + " → " + esc(e.to) + ' <span class="dim">' + esc(fmtDT(e.at) || "") + " · " + esc(e.source_revision || "") + "</span></li>"; }, "No change recorded since the append-only log started.") + '<a class="btn small" href="#activity">Activity feed</a>', { cls: "span-all" }));
+    return { title: "Sources & audit", sub: "Can the numbers be trusted? Revision, hashes, validation, reconciliation, change log", cards: out, grid: "grid two" };
+  }
+
   var VIEWS = [
-    { id: "overview", name: "Executive overview", short: "Overview", fn: vOverview, icon: '<path d="M3 13h8V3H3zm10 8h8V11h-8zM3 21h8v-6H3zm10-18v6h8V3z"/>' },
-    { id: "workstreams", name: "Workstreams", short: "Streams", fn: vWorkstreams, icon: '<path d="M4 6h16v2H4zm0 5h10v2H4zm0 5h13v2H4z"/>' },
-    { id: "timeline", name: "Milestones & timeline", short: "Timeline", fn: vTimeline, icon: '<path d="M5 3v18h2V3zm4 3h11l-2 3 2 3H9z"/>' },
-    { id: "qa", name: "Engineering & QA", short: "QA", fn: vQA, icon: '<path d="M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4z"/>' },
-    { id: "blockers", name: "Blockers & risks", short: "Blockers", fn: vBlockers, icon: '<path d="M12 2 1 21h22zm1 15h-2v-2h2zm0-4h-2V9h2z"/>' },
-    { id: "resources", name: "Resources & agents", short: "Agents", fn: vResources, icon: '<path d="M12 12a4 4 0 1 0-4-4 4 4 0 0 0 4 4zm0 2c-3 0-8 1.5-8 4.5V21h16v-2.5c0-3-5-4.5-8-4.5z"/>' },
+    { id: "overview", name: "Mission Control", short: "Mission", fn: vMission, icon: '<path d="M3 13h8V3H3zm10 8h8V11h-8zM3 21h8v-6H3zm10-18v6h8V3z"/>' },
+    { id: "actions", name: "Action Center", short: "Actions", fn: vActions, icon: '<path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm-1 15-5-5 1.4-1.4 3.6 3.6 7.6-7.6L20 8z"/>' },
+    { id: "workers", name: "Workers & capacity", short: "Workers", fn: vWorkers, icon: '<path d="M12 12a4 4 0 1 0-4-4 4 4 0 0 0 4 4zm0 2c-3 0-8 1.5-8 4.5V21h16v-2.5c0-3-5-4.5-8-4.5z"/>' },
+    { id: "decisions", name: "Decisions & gates", short: "Gates", fn: vDecisions, icon: '<path d="M4 4h16v4H4zm2 6h12v10H6zm3 3v2h6v-2z"/>' },
+    { id: "milestones", name: "Milestones & progress", short: "Progress", fn: vMilestones, icon: '<path d="M5 3v18h2v-7h11l-2-3.5L18 7H7V3z"/>' },
+    { id: "timeline", name: "Timeline & forecast", short: "Forecast", fn: vForecast, icon: '<path d="M3 5h18v2H3zm2 4h6v10H5zm8 4h6v6h-6z"/>' },
+    { id: "blockers", name: "Blockers & risks", short: "Blockers", fn: vRisks, icon: '<path d="M12 2 1 21h22zm1 15h-2v-2h2zm0-4h-2V9h2z"/>' },
+    { id: "tracker", name: "Tracker & workstreams", short: "Tracker", fn: vTracker, icon: '<path d="M4 6h16v2H4zm0 5h10v2H4zm0 5h13v2H4z"/>' },
+    { id: "quality", name: "Quality & acceptance", short: "Quality", fn: vQuality, icon: '<path d="M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4z"/>' },
+    { id: "sources", name: "Sources & audit", short: "Sources", fn: vSources, icon: '<path d="M6 2h9l5 5v15H6zm8 1v5h5M9 13h8v2H9zm0 4h8v2H9z"/>' },
     { id: "release", name: "Release management", short: "Release", fn: vRelease, icon: '<path d="M12 2c3 2 5 6 5 10l-2 4H9l-2-4c0-4 2-8 5-10zm0 6a2 2 0 1 0 0 4 2 2 0 0 0 0-4zM8 18h8l-1 4H9z"/>' },
     { id: "activity", name: "Activity", short: "Feed", fn: vActivity, icon: '<path d="M3 12h4l3-8 4 16 3-8h4"/>' }
   ];
+  var ALIAS = { workstreams: "tracker", qa: "quality", resources: "workers" };
   function renderView(id, D, now, ctx) {
     ctx = ctx || {}; ctx.ui = ctx.ui || { open: {} }; ctx.ui.open = ctx.ui.open || {};
+    id = ALIAS[id] || id;
     var v = VIEWS.filter(function (x) { return x.id === id; })[0] || VIEWS[0], r = v.fn(D || {}, now || Date.now(), ctx);
     return { id: v.id, title: r.title, sub: r.sub, grid: r.grid, cards: r.cards };
   }
   function bannerHtml(D, now, ctx) {
-    var sy = syncInfo(D, now, ctx && ctx.fetchErr);
-    if (sy.state !== "STALE" && sy.state !== "FAILED") return "";
-    var cls = sy.state === "FAILED" ? "failed" : "stale", msg = sy.problems.slice();
-    if (sy.state === "FAILED" && sy.error && msg.indexOf(sy.error) < 0) msg.push("Sync error: " + sy.error);
-    if (!msg.length) msg.push(sy.state === "FAILED" ? "The last data sync failed." : "Data may be out of date.");
-    return '<div class="banner ' + cls + '"><b>' + (sy.state === "FAILED" ? "Sync FAILED" : "Data STALE") + "</b> — last successful sync " + (fmtDT(sy.last_success) ? esc(fmtDT(sy.last_success)) : nr()) + ". " + msg.map(esc).join(" ") + "</div>";
+    return alerts(D, now, ctx).map(function (x) { return '<div class="banner ' + x.cls + '" data-alert="' + esc(x.title) + '"><b>' + esc(x.title) + "</b> — " + esc(x.msg) + "</div>"; }).join("");
   }
   function topMetaHtml(D, now, ctx) {
     var sy = syncInfo(D, now, ctx && ctx.fetchErr), h = obj(D.health).value;
@@ -483,7 +746,7 @@
       (h ? '<span class="pill" style="color:' + col(h) + '" title="Project health">' + esc(h) + "</span>" : "") +
       '<span class="small muted">' + esc(sy.last_success ? "synced " + ago(sy.last_success, now) : "") + "</span>";
   }
-  var API = { renderView: renderView, md: md, VIEWS: VIEWS, bannerHtml: bannerHtml, topMetaHtml: topMetaHtml, esc: esc, resolveDoc: resolveDoc };
+  var API = { alerts: alerts, nodeDetail: nodeDetail, provLine: provLine, renderView: renderView, md: md, VIEWS: VIEWS, bannerHtml: bannerHtml, topMetaHtml: topMetaHtml, esc: esc, resolveDoc: resolveDoc };
   if (typeof module !== "undefined" && module.exports) { module.exports = API; return; }
 
   /* ---------- browser runtime ---------- */
@@ -494,7 +757,7 @@
   var S = { D: null, raw: "", fetchErr: null, fetchedAt: null, ui: { open: {}, filter: "all" }, prev: {}, view: null, login: false };
   function ctx() { return { fetchErr: S.fetchErr, fetchedAt: S.fetchedAt, ui: S.ui }; }
   function navHtml(cur, mobile) { return VIEWS.map(function (v) { return '<a href="#' + v.id + '"' + (v.id === cur ? ' aria-current="page"' : "") + '><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"' + (v.id === "activity" ? ' style="fill:none;stroke:currentColor;stroke-width:2"' : "") + ">" + v.icon + "</svg>" + esc(mobile ? v.short : v.name) + "</a>"; }).join(""); }
-  function cur() { var h = (root.location.hash || "").slice(1); return VIEWS.some(function (v) { return v.id === h; }) ? h : "overview"; }
+  function cur() { var h = (root.location.hash || "").slice(1); h = ALIAS[h] || h; return VIEWS.some(function (v) { return v.id === h; }) ? h : "overview"; }
   function render(force) {
     if (!S.D) return;
     var now = Date.now(), id = cur(), main = $("#main"), r = renderView(id, S.D, now, ctx());
@@ -505,6 +768,7 @@
       main.innerHTML = '<div class="view-head"><h1>' + esc(r.title) + "</h1><p>" + r.sub + '</p></div><div class="' + r.grid + '" id="cards"></div>';
       S.prev = {}; S.view = id; doc.title = r.title + " · Renewable Manager Command Center";
     }
+    var pf = $("#pfoot"); if (pf) { var ph = provLine(S.D, now) + ' · <a href="#sources">Details</a>'; if (pf.innerHTML !== ph) pf.innerHTML = ph; }
     var host = $("#cards"), keys = r.cards.map(function (c) { return c.key; }), existing = Array.prototype.slice.call(host.children);
     var same = existing.length === keys.length && existing.every(function (el, i) { return el.getAttribute("data-key") === keys[i]; });
     if (!same) { host.innerHTML = r.cards.map(function (c) { return c.html; }).join(""); S.prev = {}; r.cards.forEach(function (c) { S.prev[c.key] = c.html; }); return; }
@@ -547,18 +811,25 @@
       .then(function (t) { body.innerHTML = md(t, String(p).replace(/:\d+$/, "")); body.scrollTop = 0; })
       .catch(function (e) { body.innerHTML = '<div class="banner failed"><b>Doc not available</b> — ' + esc(r.url) + " (" + esc(e.message) + "). " + (r.indexed ? "" : "This path is not listed in docs.files, so it may not be published.") + "</div>"; });
   }
+  function openNode(id) {
+    lastFocus = doc.activeElement; $("#viewer-path").textContent = "Task " + id; $("#viewer-body").innerHTML = nodeDetail(S.D, id);
+    $("#viewer").hidden = false; $("#viewer-body").scrollTop = 0; $("#viewer-close").focus();
+  }
+  doc.addEventListener("input", function (ev) { if (ev.target.id === "trk-q") { S.ui.q = ev.target.value; render(false); } });
+  doc.addEventListener("change", function (ev) { var f = ev.target.getAttribute && ev.target.getAttribute("data-f"); if (f) { S.ui.f = S.ui.f || {}; S.ui.f[f] = ev.target.value; render(false); } });
   function closeDoc() { $("#viewer").hidden = true; if (lastFocus && lastFocus.focus) lastFocus.focus(); }
   doc.addEventListener("click", function (ev) {
-    var t = ev.target.closest ? ev.target.closest("[data-doc],[data-toggle],[data-filter],#viewer-close") : null;
+    var t = ev.target.closest ? ev.target.closest("[data-doc],[data-node],[data-toggle],[data-filter],#viewer-close") : null;
     if (!t) { if (ev.target.id === "viewer") closeDoc(); return; }
     if (t.id === "viewer-close") return closeDoc();
     if (t.hasAttribute("data-doc")) { ev.preventDefault(); return openDoc(t.getAttribute("data-doc")); }
+    if (t.hasAttribute("data-node")) { ev.preventDefault(); return openNode(t.getAttribute("data-node")); }
     if (t.hasAttribute("data-toggle")) { var k = t.getAttribute("data-toggle"); S.ui.open[k] = !S.ui.open[k]; return render(false); }
     if (t.hasAttribute("data-filter")) { S.ui.filter = t.getAttribute("data-filter"); return render(false); }
   });
   doc.addEventListener("toggle", function (ev) { var k = ev.target.getAttribute && ev.target.getAttribute("data-open"); if (k) { S.ui.open[k] = ev.target.open; var c = ev.target.closest("[data-key]"); if (c) S.prev[c.getAttribute("data-key")] = null; } }, true);
   doc.addEventListener("keydown", function (ev) { if (ev.key === "Escape" && !$("#viewer").hidden) closeDoc(); });
-  root.addEventListener("hashchange", function () { render(true); root.scrollTo(0, 0); });
+  root.addEventListener("hashchange", function () { S.ui.q = ""; S.ui.f = {}; render(true); root.scrollTo(0, 0); });
   doc.addEventListener("visibilitychange", function () { if (!doc.hidden) load(); });
   setInterval(function () { if (!doc.hidden && !S.login) load(); }, 60000);
   $("#tabs").innerHTML = navHtml(cur(), false); $("#bnav").innerHTML = navHtml(cur(), true);
