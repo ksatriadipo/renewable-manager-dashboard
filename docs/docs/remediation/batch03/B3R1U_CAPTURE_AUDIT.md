@@ -53,3 +53,18 @@ Evidence: b3r3u `player.log` (A57 + 960×540): `X15POWER: g18a_cable gardu=A15-B
 Cause (code, FACT): `Game/World/X15/PowerLine15x.cs` route planner evaluates only three candidates (straight, two single-L) and keeps the one with the fewest conflicts even when every candidate conflicts (`Conflicts(...)` counts buildings whose footprint radius + `HouseClearM` touches a segment). There is no road-following or obstacle-avoiding search.
 Impact: violates r520 acceptance (no cables to/over houses, plausible routes, ≥ 6 m clearance). B3-04 → NEEDS_REWORK (product). r520 switch `PowerLine15x.Enabled` defaults ON in tester builds.
 Proposed fix (PROPOSAL, awaiting owner): route along the road/verge network from map geometry (owner decision 15 Nov "geometri peta = sumber kebenaran") with a grid/graph search that treats house footprints + 6 m as blocked; if no clear route exists, place the kiosk/substation at a reachable node or keep the old straight line OFF — never accept a conflicting route; acceptance = measured clearance ≥ 6 m for every cable in the r525b close-up evidence. Interim option: set `PowerLine15x.Enabled` default OFF until fixed (OFF = legacy behaviour, already verified).
+
+## b3r5u — r525b evidence channel (21 Nov 2026)
+EditMode b3r5 2652/0/0/4. uidev A57 18/8, 960×540 18/8; **regression lock gagal 0 on both profiles** (evidence now in `b3r525_evidence.jsonl` + raw PNG, not in shots.jsonl) → capture integrity restored.
+
+| Evidence | Measured (A57; 960×540 identical) | Verdict |
+|---|---|---|
+| r520 cable 1 ON (route + near-house close-up) | endpoints matched 1; poles 8 @ 11.0 m; max span 43.2 m; sag 2.0 %; **house_intersections 5; min_house_clear_m 0** | **FAIL** — confirms product defect (close-up shows the cable crossing a house block) |
+| r520 cable 2 ON | poles 9 @ 11 m; span 47.5 m; sag 2 %; **house_intersections 7; clearance 0 m** | **FAIL** |
+| r520 cable 3 ON | poles 7 @ 11 m; span 44.9 m; sag 2 %; **house_intersections 5; clearance 0 m** | **FAIL** |
+| r520 OFF (legacy straight line) | no poles; house_intersections 5 (record only) | OFF = legacy (recorded) |
+| Locked-region tap | `locked_tap_target_changed 0`; `locked_tap_infocard_selectable 1` (island-map info card only) | Locked regions are **not** selectable as project targets (FACT); r521 locked look unchanged (`locked_tint_unchanged 29`) |
+| r521 tender highlight | 29 of 30 regions locked at every autoshot step (no step has ≥ 2 Open regions) | **NOT_TESTED** (scenario unreachable without unlocking regions) |
+| r527c fixture integrity | fixture not installed; `save_full_changed: maxSeenUnix,residents` | Finding: `save_full` hash includes real-time fields (`maxSeenUnix` wall-clock guard, `residents` simulation) that change during any capture → fixture restoration check must hash these separately as volatile (proposal for Auditor; criterion unchanged until approved) |
+| r523 office day/night/OFF | PASS (edge_clear_hits 0) | as b3r3u |
+| r529b occlusion | PASS (unchanged) | as b3r3u |
