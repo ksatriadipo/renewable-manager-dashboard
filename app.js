@@ -140,6 +140,82 @@
   function batchProg(b) { var x = D.batches[b]; return x ? x : null; }
 
   /* ---------- A. Executive overview ---------- */
+
+  /* ---------- island village: milestones as buildings, tasks as houses (lit window = tested or accepted) ---------- */
+  var VSEL = null;
+  var MS_ICON = { M1: "bank", M2: "solar", M3: "homes", M4: "hq", M5: "map", M6: "lab", M7: "flag" };
+  var MS_POS = [[120, 205], [215, 160], [320, 140], [430, 150], [530, 175], [600, 230], [650, 282]];
+  function msState(m) { return m.complete ? "done" : (m.pct_implemented > 0 || m.pct_tested > 0) ? "build" : "plan"; }
+  function bldSvg(m, i) {
+    var p = MS_POS[i] || [100 + i * 80, 200], x = p[0], y = p[1], st = msState(m), ic = MS_ICON[m.id] || "hq";
+    var ghost = st === "plan", wall = ghost ? "none" : "var(--wall)", roof = ghost ? "none" : (st === "done" ? "var(--leaf)" : "var(--roof)");
+    var dash = ghost ? ' stroke-dasharray="4 3"' : "";
+    var g = '<g class="bld' + (VSEL === m.id ? " sel" : "") + '" data-ms="' + esc(m.id) + '" tabindex="0" role="button" aria-label="' + esc(m.id + " " + m.name + ", " + Math.round(m.pct_tested || 0) + "% tested") + '" transform="translate(' + x + "," + y + ')">';
+    g += '<ellipse class="bld-ring" cx="0" cy="22" rx="34" ry="9" fill="var(--land-2)" stroke="none"></ellipse>';
+    if (ic === "solar") {
+      g += '<g' + dash + '><rect x="-26" y="-2" width="22" height="14" rx="2" fill="' + (ghost ? "none" : "#3d6fa8") + '" stroke="var(--line-2)" stroke-width="2" transform="skewX(-15)"></rect><rect x="2" y="-2" width="22" height="14" rx="2" fill="' + (ghost ? "none" : "#3d6fa8") + '" stroke="var(--line-2)" stroke-width="2" transform="skewX(-15)"></rect></g>';
+    } else if (ic === "flag") {
+      g += '<line x1="0" y1="20" x2="0" y2="-26" stroke="var(--line-2)" stroke-width="3"' + dash + '></line><path d="M0 -26 L22 -19 L0 -12 Z" fill="' + (ghost ? "none" : "var(--btn)") + '" stroke="var(--line-2)" stroke-width="2"' + dash + '></path>';
+    } else {
+      var w = ic === "hq" ? 44 : 34, h = ic === "hq" ? 30 : 22;
+      g += '<rect x="' + (-w / 2) + '" y="' + (20 - h) + '" width="' + w + '" height="' + h + '" rx="3" fill="' + wall + '" stroke="var(--line-2)" stroke-width="2"' + dash + '></rect>';
+      g += '<path d="M' + (-w / 2 - 5) + " " + (20 - h) + " L0 " + (20 - h - 16) + " L" + (w / 2 + 5) + " " + (20 - h) + ' Z" fill="' + roof + '" stroke="var(--line-2)" stroke-width="2"' + dash + '></path>';
+      if (!ghost) for (var k = 0; k < (ic === "hq" ? 3 : 2); k++) g += '<rect x="' + (-w / 2 + 6 + k * 12) + '" y="' + (26 - h) + '" width="7" height="7" rx="1" fill="' + ((m.pct_tested || 0) > 0 ? "var(--lit)" : "var(--window)") + '"></rect>';
+    }
+    if (st === "build") g += '<path d="M-24 22 L-24 -18 M24 22 L24 -18 M-24 -6 L24 -6" stroke="#b7894a" stroke-width="2" fill="none" opacity=".85"></path>';
+    if (st === "done") g += '<path d="M14 -24 L14 -40 L28 -35 L14 -30" fill="var(--btn)" stroke="var(--line-2)" stroke-width="1.5"></path>';
+    g += '<rect x="-17" y="26" width="34" height="15" rx="7" fill="var(--surface)" stroke="var(--line-2)" stroke-width="1.5"></rect><text x="0" y="37" text-anchor="middle">' + esc(m.id) + "</text>";
+    g += "<title>" + esc(m.id + " · " + m.name + " — tested " + Math.round(m.pct_tested || 0) + "%, accepted " + Math.round(m.pct_accepted || 0) + "%") + "</title></g>";
+    return g;
+  }
+  function villageSvg() {
+    var W = 720, H = 430, s = '<svg class="island" viewBox="0 0 ' + W + " " + H + '" role="img" aria-label="Project island: buildings are milestones, houses are tasks">';
+    s += '<rect width="' + W + '" height="' + H + '" fill="var(--sky-1)"></rect><rect y="55" width="' + W + '" height="45" fill="var(--sky-2)" opacity=".7"></rect><circle cx="640" cy="52" r="22" fill="var(--sun)"></circle><circle cx="652" cy="44" r="19" fill="var(--moon-cut)"></circle>';
+    s += '<g class="cloud" opacity=".85"><ellipse cx="80" cy="60" rx="34" ry="12" fill="var(--cloud)"></ellipse><ellipse cx="104" cy="52" rx="22" ry="11" fill="var(--cloud)"></ellipse></g>';
+    s += '<rect y="95" width="' + W + '" height="' + (H - 95) + '" fill="var(--sea)"></rect>';
+    s += '<path d="M40 250 C40 150 160 105 330 105 C520 105 690 150 690 260 C690 360 560 405 360 405 C170 405 40 360 40 250 Z" fill="var(--road)" opacity=".9"></path>';
+    s += '<path d="M54 250 C54 160 168 118 330 118 C514 118 676 160 676 260 C676 350 552 392 360 392 C178 392 54 350 54 250 Z" fill="var(--land)" stroke="var(--land-2)" stroke-width="3"></path>';
+    s += '<path d="M95 225 C170 190 230 150 320 150 C420 150 470 165 530 190 C580 210 620 250 640 300" fill="none" stroke="var(--road)" stroke-width="12" stroke-linecap="round"></path>';
+    [[86, 140], [662, 170]].forEach(function (t) { s += '<g transform="translate(' + t[0] + "," + t[1] + ')"><line x1="0" y1="0" x2="0" y2="46" stroke="#fff" stroke-width="4"></line><g class="blade"><path d="M0 0 L3 -22 L-3 -22 Z M0 0 L20 10 L17 15 Z M0 0 L-20 10 L-17 15 Z" fill="#fff" stroke="var(--line-2)" stroke-width="1"></path></g><circle r="3" fill="var(--line-2)"></circle></g>'; });
+    var groups = [["B0", "B05", "B1"], ["B2"], ["B3"], ["V"], ["B4", "B5", "B6", "B7", "B8"], ["SUP"]];
+    var labels = ["Batch 0–1", "Batch 2", "Batch 3", "Validation", "Batch 4–8", "Support"];
+    var origin = [[96, 290], [230, 300], [360, 300], [470, 270], [470, 330], [572, 358]];
+    groups.forEach(function (bs, gi) {
+      var ts = D.tasks.filter(function (t) { return bs.indexOf(t.batch) >= 0; }), o = origin[gi], cols = gi === 0 ? 8 : gi >= 4 ? 6 : 7;
+      if (!ts.length) return;
+      s += '<text x="' + o[0] + '" y="' + (o[1] - 8) + '" style="font-size:10px">' + esc(labels[gi]) + "</text>";
+      ts.forEach(function (t, i) {
+        var x = o[0] + (i % cols) * 15, y = o[1] + Math.floor(i / cols) * 15, lit = t.status === "TESTED" || t.status === "ACCEPTED";
+        s += '<g class="house" data-task="' + esc(t.id) + '" tabindex="0" role="button" aria-label="' + esc(t.id + " " + t.status) + '"><path d="M' + (x - 1) + " " + (y + 4) + " L" + (x + 5) + " " + (y - 2) + " L" + (x + 11) + " " + (y + 4) + ' Z" fill="' + col(t.status) + '"></path>' +
+          '<rect x="' + x + '" y="' + (y + 4) + '" width="10" height="8" fill="var(--wall)" stroke="var(--line-2)" stroke-width="1"></rect><rect x="' + (x + 3) + '" y="' + (y + 6) + '" width="4" height="4" fill="' + (lit ? "var(--lit)" : "var(--window)") + '"></rect>' +
+          "<title>" + esc(t.id + " · " + t.title + " — " + t.status) + "</title></g>";
+      });
+    });
+    D.milestones.forEach(function (m, i) { s += bldSvg(m, i); });
+    return s + "</svg>";
+  }
+  function villageCard() {
+    var m = D.milestones.filter(function (x) { return x.id === VSEL; })[0];
+    if (!m) return "";
+    var f = (D.forecast.per_milestone || {})[m.id] || {}, st = msState(m);
+    var stTxt = st === "done" ? "Completed" : st === "build" ? "Under construction" : "Planned";
+    return '<div class="vcard"><span class="note">' + esc(stTxt) + "</span><h2>" + esc(m.id + " · " + m.name) + '</h2><span class="big">' + Math.round(m.pct_tested || 0) + '%</span><span class="note">tested or accepted · ' + Math.round(m.pct_accepted || 0) + "% accepted · " + num(m.total) + " tasks</span>" +
+      stackBar(D.meta.statuses.map(function (s2) { return { k: s2, v: obj(m.status)[s2] || 0, c: col(s2) }; }), m.total) +
+      '<dl class="kv"><dt>Scope</dt><dd>' + esc(m.scope || "–") + '</dd><dt>Forecast</dt><dd class="num">P50 ' + esc(f.p50_date || "–") + " · P80 " + esc(f.p80_date || "–") + ' <span class="chip">ESTIMATED</span></dd></dl>' +
+      '<div class="chips">' + arr(m.tasks).map(function (id) { var t = byId(id); return '<a href="#register" data-task="' + esc(id) + '" class="chip" style="border-color:' + col(t ? t.status : "") + '">' + esc(id) + "</a>"; }).join(" ") + "</div></div>";
+  }
+  function villageInner() {
+    if (!VSEL) { var cur = D.milestones.filter(function (m) { return !m.complete; })[0]; VSEL = cur ? cur.id : (D.milestones[0] || {}).id; }
+    return '<div class="village"><div>' + villageSvg() + '<div class="vlegend"><span><i style="background:var(--lit)"></i>window lit = tested or accepted</span><span><i style="background:var(--roof)"></i>roof = task status</span><span>scaffold = under construction · dashed = planned · flag = complete</span></div></div>' + villageCard() + "</div>";
+  }
+  function bindVillage() {
+    $$(".island .bld").forEach(function (g) {
+      var pick = function () { VSEL = g.getAttribute("data-ms"); var host = $("#village"); if (host) { host.innerHTML = villageInner(); bindVillage(); } };
+      g.addEventListener("click", pick);
+      g.addEventListener("keydown", function (e) { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); pick(); } });
+    });
+    $$(".island .house").forEach(function (g) { g.addEventListener("keydown", function (e) { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openTask(g.getAttribute("data-task")); } }); });
+  }
   function overview() {
     var t = D.tasks, sc = D.status_count, n = t.length, cancelled = sc.CANCELLED || 0, base = n - cancelled;
     var acc = sc.ACCEPTED || 0, tested = (sc.TESTED || 0) + acc, impl = tested + (sc.IMPLEMENTED || 0);
@@ -148,6 +224,7 @@
     var cpNext = D.critical_path.path.filter(function (i) { var x = byId(i); return x && x.status !== "ACCEPTED"; })[0];
     var fc = D.forecast.per_milestone, halt = D.meta.halt, h = "";
     if (halt && (halt.text || halt.date)) h += '<div class="banner paused"><b>Project paused by owner</b><span class="note">' + esc(halt.text || "") + (halt.src ? " Source: " + esc(halt.src) : "") + (halt.date ? " (" + esc(halt.date) + ")" : "") + ".</span></div>";
+    h += panel("Project island", '<div id="village">' + villageInner() + "</div>", "Tap a building to see that milestone; tap a house to open its task. Every house is one task.");
     h += '<div class="grid">' + kpi("Unique tasks", n, "all batches") + kpi("Accepted", acc, pctTxt(acc, base) + " complete") +
       kpi("Tested", sc.TESTED || 0, "tested+accepted " + pctTxt(tested, base)) + kpi("Implemented", sc.IMPLEMENTED || 0, "impl.+ " + pctTxt(impl, base)) +
       kpi("In progress", sc.IN_PROGRESS || 0, "") + kpi("Ready", sc.READY || 0, "") + kpi("Blocked", sc.BLOCKED || 0, "external dependency") +
@@ -178,6 +255,7 @@
       D.findings.length + " findings. Findings are not tasks and are not counted in task totals.") +
       panel("Recent activity", table(["When", "Repo", "Commit", "Subject"], D.activity.map(function (a) { return '<tr><td class="mono nw">' + esc(String(a.at || "").slice(0, 16).replace("T", " ")) + "</td><td>" + esc(a.repo) + '</td><td class="mono">' + esc(a.hash) + "</td><td>" + esc(a.subject) + "</td></tr>"; }), "No commits recorded.")) + "</div>";
     $("#v-overview").innerHTML = h;
+    bindVillage();
   }
 
   /* ---------- B. Task register (search/filter/sort/create/edit) ---------- */
