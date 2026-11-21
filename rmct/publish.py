@@ -46,7 +46,10 @@ def publish(cfg):
     open(os.path.join(wt, ".nojekyll"), "w").close()
     data = json.dumps(d, default=str, separators=(",", ":"))
     open(os.path.join(wt, "data", "dashboard.json"), "w", encoding="utf-8").write(data)
-    git(wt, "add", "-A")
+    # the published tree is exactly these files (anything else in the worktree is never committed)
+    files = ["index.html", "app.css", "app.js", ".nojekyll", "data/dashboard.json"]
+    git(wt, "read-tree", "--empty")
+    git(wt, "add", "-f", "--", *files)
     if git(wt, "diff", "--cached", "--quiet", check=False).returncode == 0:
         return {"ok": True, "changed": False}
     env = dict(os.environ, GIT_AUTHOR_NAME="rmct-bot", GIT_AUTHOR_EMAIL="rmct-bot@users.noreply.github.com",
