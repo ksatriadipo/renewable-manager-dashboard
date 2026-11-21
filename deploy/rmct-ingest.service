@@ -1,0 +1,10 @@
+[Unit]
+Description=RM Control Tower ingestion (read-only on project sources)
+
+[Service]
+Type=oneshot
+WorkingDirectory=/srv/rmct
+Environment=RMCT_CONFIG=/srv/rmct-private/config.json
+ExecStart=/usr/bin/python3 -m rmct ingest
+Nice=10
+IOSchedulingClass=idle

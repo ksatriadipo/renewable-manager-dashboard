@@ -1,0 +1,11 @@
+# Replace tower.example.com with your subdomain (A record -> VPS public IP, domain registered in the VPS panel).
+tower.example.com {
+	encode gzip
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options nosniff
+		Referrer-Policy no-referrer
+		X-Frame-Options DENY
+	}
+	reverse_proxy 127.0.0.1:8790
+}
