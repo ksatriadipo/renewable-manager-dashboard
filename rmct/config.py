@@ -18,7 +18,11 @@ def load(path=None):
     if not os.path.exists(path):
         raise ConfigError("RMCT_CONFIG file not found: " + path)
     cfg = json.load(open(path, encoding="utf-8"))
-    for k in ("db_path", "adapter_path", "sources"):
+    cfg.setdefault("mode", os.environ.get("RMCT_MODE", "primary"))
+    if cfg["mode"] not in ("primary", "replica"):
+        raise ConfigError("mode must be primary or replica")
+    need = ("db_path", "adapter_path", "sources") if cfg["mode"] == "primary" else ("db_path", "allowed_signers")
+    for k in need:
         if k not in cfg:
             raise ConfigError("config key missing: " + k)
     cfg.setdefault("bind", os.environ.get("RMCT_BIND", "127.0.0.1"))

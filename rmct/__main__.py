@@ -1,4 +1,4 @@
-"""CLI: python3 -m rmct {migrate,ingest,serve,setup-token,backup} [--config PATH]. Config path defaults to $RMCT_CONFIG."""
+"""CLI: python3 -m rmct {migrate,ingest,serve,setup-token,sync-push,backup} [--config PATH]. Config path defaults to $RMCT_CONFIG."""
 import argparse, json, sys
 
 from . import auth, config, db
@@ -15,6 +15,8 @@ def main(argv=None):
     s.add_argument("--port", type=int)
     t = sub.add_parser("setup-token", help="print a one-time setup token (create or reset a login)")
     t.add_argument("--hours", type=int, default=24)
+    t.add_argument("--replica", action="store_true", help="deliver the token to the Codespaces replica with the next sync")
+    sub.add_parser("sync-push", help="primary: push a signed snapshot to the replica and replay replica edits")
     sub.add_parser("backup", help="consistent SQLite backup into the private backups folder")
     a = p.parse_args(argv)
     try:
@@ -40,8 +42,17 @@ def main(argv=None):
         con = db.connect(cfg["db_path"])
         db.migrate(con)
         tok, exp = auth.create_setup_token(con, a.hours)
+        if a.replica:
+            from . import sync
+            sync.add_setup_token_hash(con, auth._h(tok), exp)
         con.close()
+        base = (cfg.get("replica_url") if a.replica else cfg.get("public_url")) or ""
         print("one-time setup token (expires %s):\n%s" % (exp, tok))
+        if base:
+            print("setup link: %s/?setup=%s" % (base.rstrip("/"), tok))
+    elif a.cmd == "sync-push":
+        from . import sync
+        print(json.dumps(sync.push(cfg)))
     elif a.cmd == "backup":
         from .ingest import run
         print(run.backup(cfg))

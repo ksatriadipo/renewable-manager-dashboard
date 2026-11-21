@@ -9,13 +9,14 @@ import datetime, http.cookies, json, mimetypes, os, re, threading, traceback
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlsplit
 
-from . import auth, compute, db
+from . import auth, compute, db, edits, sync
 from .ingest import run as ingest_run
 
 HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 WEB = os.path.join(HERE, "web")
 COOKIE = "rmct_session"
 MAX_BODY = 1_000_000
+MAX_SYNC_BODY = 64_000_000
 
 EDITABLE = {"title", "description", "batch", "workstream", "category", "priority", "status", "owner", "milestone",
             "est_p50_d", "est_p80_d", "planned_start", "planned_finish", "planned_finish_p80", "actual_start", "actual_finish",
@@ -121,12 +122,18 @@ class App:
             if self._cache is None:
                 con = self.con()
                 try:
-                    self._cache = json.dumps(compute.build(con), default=str).encode()
+                    d = compute.build(con)
+                    st = dict(con.execute("SELECT key, value FROM sync_state").fetchall()) if self.cfg.get("mode") == "replica" else {}
+                    d["meta"]["deployment"] = {"mode": self.cfg.get("mode", "primary"), "last_sync": st.get("last_sync"),
+                                               "pending_edits": con.execute("SELECT COUNT(*) FROM outbox WHERE acked_at IS NULL").fetchone()[0]}
+                    self._cache = json.dumps(d, default=str).encode()
                 finally:
                     con.close()
             return self._cache
 
     def run_ingest(self, trigger):
+        if self.cfg.get("mode") == "replica":
+            raise ApiError(409, "this is a read replica: data is refreshed from the VPS automatically")
         if not self.ingest_lock.acquire(blocking=False):
             raise ApiError(409, "ingestion already running")
         try:
@@ -250,6 +257,8 @@ def make_handler(app):
                 if method != "GET" and self.headers.get("X-RMCT") != "1":
                     raise ApiError(403, "missing X-RMCT header")
                 con = app.con()
+                if path == "/api/sync" and method == "POST":
+                    return self.api_sync(con)
                 if path == "/api/setup" and method == "POST":
                     return self.api_setup(con)
                 if path == "/api/login" and method == "POST":
@@ -353,37 +362,42 @@ def make_handler(app):
                              headers=[self.cookie(tok, int(app.cfg.get("session_days", 30)) * 86400)])
 
         # ---------- tasks
+        def api_sync(self, con):
+            if app.cfg.get("mode") != "replica":
+                raise ApiError(404, "not found")
+            if not auth.rate_ok("sync:" + self.ip(), limit=30, window=300):
+                raise ApiError(429, "too many sync attempts")
+            n = int(self.headers.get("Content-Length") or 0)
+            if n <= 0 or n > MAX_SYNC_BODY:
+                raise ApiError(413, "bad snapshot size")
+            raw = self.rfile.read(n)
+            try:
+                pending = sync.apply(con, raw, self.headers.get("X-RMCT-Signature"), app.cfg["allowed_signers"])
+            except ValueError as e:
+                auth.rate_hit("sync:" + self.ip())
+                audit(con, "", "sync_rejected", {"reason": str(e)}, self.ip())
+                raise ApiError(403, "sync rejected: %s" % e)
+            app.invalidate()
+            return self.send(200, {"ok": True, "outbox": pending})
+
         def create_task(self, con, user):
             b = self.body()
             tid = (b.get("id") or "").strip() if isinstance(b, dict) else ""
             vals = normalize(b, partial=False)
             con.execute("BEGIN IMMEDIATE")
             try:
-                if not tid:
-                    n = con.execute("SELECT COUNT(*) FROM tasks WHERE origin='manual'").fetchone()[0] + 1
-                    while con.execute("SELECT 1 FROM tasks WHERE id=?", ("M-%03d" % n,)).fetchone():
-                        n += 1
-                    tid = "M-%03d" % n
-                if not ID_RX.match(tid):
-                    raise ApiError(400, "id: 1–40 letters, digits, . _ -")
-                if con.execute("SELECT 1 FROM tasks WHERE id=?", (tid,)).fetchone():
-                    raise ApiError(409, "task id already exists")
-                now = db.now()
-                vals.setdefault("source", "manual entry by " + user)
-                cols = ["id"] + list(vals) + ["origin", "locked_fields", "created_at", "updated_at"]
-                args = [tid] + list(vals.values()) + ["manual", json.dumps(sorted(vals)), now, now]
-                con.execute("INSERT INTO tasks(%s) VALUES (%s)" % (",".join(cols), ",".join("?" * len(cols))), args)
-                for f, v in vals.items():
-                    con.execute("INSERT INTO task_history(task_id, at, field, old_value, new_value, source, actor) VALUES (?,?,?,?,?,?,?)",
-                                (tid, now, f, None, None if v is None else str(v), "manual create", user))
-                audit(con, user, "task_create", {"id": tid, "fields": sorted(vals)}, self.ip())
+                tid = edits.create(con, user, tid, vals, "manual create", ip=self.ip(), id_rx=ID_RX)
+                if app.cfg.get("mode") == "replica":
+                    sync.record(con, user, "task_create", dict(b, id=tid))
                 con.execute("COMMIT")
+            except edits.EditError as e:
+                con.execute("ROLLBACK")
+                raise ApiError(e.code, e.msg)
             except Exception:
                 con.execute("ROLLBACK")
                 raise
             app.invalidate()
-            r = con.execute("SELECT * FROM tasks WHERE id=?", (tid,)).fetchone()
-            return self.send(201, compute.task_dict(r))
+            return self.send(201, edits.task(con, tid))
 
         def patch_task(self, con, user, tid):
             b = self.body()
@@ -393,31 +407,19 @@ def make_handler(app):
                 raise ApiError(400, "no fields to change")
             con.execute("BEGIN IMMEDIATE")
             try:
-                cur = con.execute("SELECT * FROM tasks WHERE id=?", (tid,)).fetchone()
-                if not cur:
-                    raise ApiError(404, "task not found")
-                if expect and expect != cur["updated_at"]:
-                    raise ApiError(409, "task changed since it was loaded; reload and retry")
-                changes = {f: (cur[f], v) for f, v in vals.items()
-                           if (cur[f] if cur[f] is not None else "") != (v if v is not None else "")}
-                locked = set(db.jload(cur["locked_fields"], [])) | set(changes)
-                now = db.now()
-                if changes:
-                    sets = ", ".join("%s=?" % f for f in changes)
-                    con.execute("UPDATE tasks SET %s, locked_fields=?, updated_at=? WHERE id=?" % sets,
-                                [v[1] for v in changes.values()] + [json.dumps(sorted(locked)), now, tid])
-                    for f, (o, n) in changes.items():
-                        con.execute("INSERT INTO task_history(task_id, at, field, old_value, new_value, source, actor) VALUES (?,?,?,?,?,?,?)",
-                                    (tid, now, f, None if o is None else str(o), None if n is None else str(n), "manual edit", user))
-                    audit(con, user, "task_update", {"id": tid, "fields": sorted(changes)}, self.ip())
+                changed = edits.patch(con, user, tid, vals, "manual edit", expect=expect, ip=self.ip())
+                if changed and app.cfg.get("mode") == "replica":
+                    sync.record(con, user, "task_patch", {"id": tid, "fields": {k: v for k, v in b.items() if k not in ("id", "updated_at")}})
                 con.execute("COMMIT")
+            except edits.EditError as e:
+                con.execute("ROLLBACK")
+                raise ApiError(e.code, e.msg)
             except Exception:
                 con.execute("ROLLBACK")
                 raise
-            if changes:
+            if changed:
                 app.invalidate()
-            r = con.execute("SELECT * FROM tasks WHERE id=?", (tid,)).fetchone()
-            return self.send(200, dict(compute.task_dict(r), changed=sorted(changes)))
+            return self.send(200, dict(edits.task(con, tid), changed=changed))
 
         def history(self, con, tid):
             if not con.execute("SELECT 1 FROM tasks WHERE id=?", (tid,)).fetchone():

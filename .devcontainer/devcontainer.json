@@ -1,0 +1,10 @@
+{
+  "name": "RM Control Tower (replica)",
+  "image": "mcr.microsoft.com/devcontainers/python:3.12",
+  "postStartCommand": "bash scripts/codespace_start.sh",
+  "forwardPorts": [8790],
+  "portsAttributes": {
+    "8790": { "label": "RM Control Tower", "onAutoForward": "silent" }
+  },
+  "customizations": { "codespaces": { "openFiles": ["docs/CODESPACES.md"] } }
+}
