@@ -1,0 +1,8 @@
+[Unit]
+Description=RM Control Tower SQLite backup
+
+[Service]
+Type=oneshot
+WorkingDirectory=/srv/rmct
+Environment=RMCT_CONFIG=/srv/rmct-private/config.json
+ExecStart=/usr/bin/python3 -m rmct backup
