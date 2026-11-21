@@ -173,7 +173,7 @@
     return '<div class="prog-row"><span>' + esc(name) + (sub ? ' <span class="dim small">' + esc(sub) + "</span>" : "") + "</span><b>" + (p == null || isNR(p) ? nr(p) : esc(p + "%")) + "</b>" +
       '<div class="bar"><i style="width:' + (num(p) || 0) + "%;background:" + color + '"></i></div></div>';
   }
-  function kpi(v, l, s, color) { return '<div class="kpi"><div class="v"' + (color ? ' style="color:' + color + '"' : "") + ">" + (isNR(v) ? nr(v) : esc(v)) + '</div><div class="l">' + esc(l) + "</div>" + (s ? '<div class="s">' + s + "</div>" : "") + "</div>"; }
+  function kpi(v, l, s, color) { var txt = typeof v === "string" && !/^[\d.,%\s+-]+$/.test(v) && v.length > 8; if (txt && !isNR(v)) v = label(v); return '<div class="kpi"><div class="v' + (txt ? " txt" : "") + '"' + (color ? ' style="color:' + color + '"' : "") + ">" + (isNR(v) ? nr(v) : esc(v)) + '</div><div class="l">' + esc(l) + "</div>" + (s ? '<div class="s">' + s + "</div>" : "") + "</div>"; }
   function card(key, title, body, opts) { opts = opts || {}; return { key: key, html: '<section class="card ' + (opts.cls || "") + '" data-key="' + esc(key) + '"><div class="card-head"><h2>' + esc(title) + "</h2>" + (opts.right || "") + "</div>" + body + "</section>" }; }
   function fallbackNote(what) { return '<p class="note">v2 key <span class="mono">' + esc(what) + "</span> " + nr() + " — showing the v1 record instead (labelled).</p>"; }
   function list(items, fn, empty) { items = arr(items); return items.length ? '<ul class="list">' + items.map(fn).join("") + "</ul>" : '<p class="empty">' + (empty || "None recorded.") + "</p>"; }
@@ -419,7 +419,7 @@
   function PM(D) { return obj(D.pm); }
   function built(D) { return PM(D).state === "BUILT"; }
   function FC(D) { return obj(D.forecast); }
-  function fcEngine(D) { return FC(D).schema === "rmct.forecast/1"; }
+  function fcEngine(F) { return obj(F).schema === "rmct.forecast/1"; }
   function bucketsOf(D) { var b = arr(obj(PM(D).status_mapping).buckets); return b.length ? b : BUCKETS_DEFAULT; }
   function nodes(D) { return arr(PM(D).nodes); }
   function nodeMap(D) { var m = {}; nodes(D).forEach(function (n) { m[n.id] = n; }); return m; }
