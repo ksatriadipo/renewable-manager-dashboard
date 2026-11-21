@@ -33,3 +33,17 @@ EditMode b3r2 2597/0/0/4. uidev A57 21 issues / 9 screens (+3 = `69_garage` "lom
 | 960×540 | 88_hq_gate_progress | PASS | PASS — same card, all 4 rows + badges visible | req 4, met 3, rows_visible 4, rows_covered 0 |
 
 r522 false PASS (b3r1u) is not repeated. Runtime occlusion with two rendered elements = r529b in b3r3u (NOT_TESTED until then).
+
+## b3r3u — r525/r526/r528/r529b/r527c runtime (21 Nov 2026)
+EditMode b3r3 2645/0/0/4 (`7d5c958`). Build OK. Perfshot regress 0 (known PERF GATE FAIL, konfig Seimbang). uidev A57 18 issues / 8 screens, 960×540 18/8. Shot numbering unchanged (88 hq_gate_progress, 89 plant_solarground, 94 r9c_roof_build_night). `44_beranda_mission_dialog` present (r528 mapping holds).
+**Regression lock FAIL (VI-F15) on both profiles: fail 5, measure_fail 4, missing_metrics 32, precondition_fail 5 — all caused by the r525 evidence shots being written into the regular uidev shot log.** → b3r3u NOT accepted; b3r4 (r527e) stays gated.
+
+| Item | Evidence | Verdict |
+|---|---|---|
+| r529b live occlusion (A57 + 960×540) | `b3r529_hqgate_selftest.json`: token before `hq_gate_progress`; real overlay on row 1 → `hq_gate:rows_covered_1`; overlay removed (2 frames) → `hq_gate_progress`; overlay beside row → not covered, no overlap; lingering 0; root child delta 0; `selftest_b3r529_hqgate_occluded.png` shows the pink overlay over row 1 | **PASS (Unity runtime)** — negative + positive proven; overlay evidence kept out of the uidev log |
+| 88_hq_gate_progress | PASS both profiles, same card/badges as b3r2u | PASS |
+| r528 rename | `44_beranda_mission_dialog` both profiles | PASS |
+| r523 office day/night (same camera) | `b3r525_office_day_on` / `night_on`: room night-graded; backdrop luma 0.5626 day and night (identical) | Finding CONFIRMED: camera clear colour #5C9E96 not night-graded → separate visual-consistency finding (no fix applied) |
+| r523 OFF | `b3r525_office_day_off` = legacy world view | OFF matches legacy (visual) |
+| r520 cable close-up (ON/OFF) | `b3r525_cable_route_*__INVALID`: frame shows map overview + Erina dialog, no cable; geometry metrics missing (NaN) | **NEEDS_REWORK (capture)** — no evidence about the cable itself |
+| r521 tender highlight via r527c fixture | precondition: only 1 unlocked region of 30 at that point (`plain_regions_1_lt2`); fixture not installed; `locked_tap … selectable1`; state hash changed `[save_full]` without fixture → FAIL | **NOT_TESTED** (scenario not reachable at that step); two items to investigate: locked-tap "selectable1" semantics and the save_full hash change |
