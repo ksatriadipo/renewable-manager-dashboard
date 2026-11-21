@@ -6,53 +6,37 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex, nofollow">
 <meta name="referrer" content="same-origin">
-<title>RM Control Tower</title>
+<meta name="color-scheme" content="dark">
+<meta name="theme-color" content="#0b1030">
+<title>Renewable Manager Command Center</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;700;800&family=Nunito+Sans:wght@400;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@700;800&family=Nunito+Sans:wght@600;700;800&family=JetBrains+Mono:wght@600;700&display=swap">
 <link rel="stylesheet" href="app.css">
 </head>
 <body>
-<header class="top" id="top">
+<a class="skip" href="#main">Skip to content</a>
+<div class="sky" aria-hidden="true"></div>
+<header class="top">
   <div class="top-in">
     <div class="brand">
-      <span class="brand-mark" aria-hidden="true"></span>
+      <svg class="brand-mark" viewBox="0 0 40 40" aria-hidden="true"><defs><linearGradient id="bm" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#45e3d4"/><stop offset="1" stop-color="#b195ff"/></linearGradient></defs><circle cx="20" cy="20" r="18" fill="none" stroke="url(#bm)" stroke-width="2.5"/><path d="M20 7 L23 18 L33 20 L23 22 L20 33 L17 22 L7 20 L17 18 Z" fill="url(#bm)"/><circle cx="20" cy="20" r="3" fill="#f6c85a"/></svg>
       <div>
-        <div class="brand-name">RM Control Tower</div>
-        <div class="brand-sub">Renewable Manager · menara kendali proyek</div>
+        <div class="brand-name">Renewable Manager</div>
+        <div class="brand-sub">Command Center</div>
       </div>
     </div>
-    <div class="top-meta">
-      <span id="health" class="pill" hidden></span>
-      <span id="fresh" class="fresh"></span>
-      <button id="reload" class="ghost" type="button" hidden>Refresh</button>
-      <button id="theme" class="ghost" type="button" aria-label="Switch theme">Theme</button>
-      <button id="logout" class="ghost" type="button" hidden>Sign out</button>
-    </div>
+    <div class="top-meta" id="top-meta"></div>
   </div>
-  <nav class="tabs" id="tabs" aria-label="Sections" hidden>
-    <a href="#overview">Overview</a><a href="#register">Tasks</a><a href="#timeline">Timeline</a><a href="#milestones">Milestones</a>
-    <a href="#tokens">Tokens</a><a href="#productivity">Productivity</a><a href="#capacity">Capacity</a><a href="#risks">Blockers</a><a href="#forecast">Forecast</a><a href="#sources">Sources</a>
-  </nav>
+  <nav class="tabs" id="tabs" aria-label="Sections"></nav>
 </header>
-<div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
-<main id="main" class="wrap">
-  <section id="v-auth" class="view" hidden></section>
-  <section id="v-overview" class="view" hidden></section>
-  <section id="v-register" class="view" hidden></section>
-  <section id="v-timeline" class="view" hidden></section>
-  <section id="v-milestones" class="view" hidden></section>
-  <section id="v-tokens" class="view" hidden></section>
-  <section id="v-productivity" class="view" hidden></section>
-  <section id="v-capacity" class="view" hidden></section>
-  <section id="v-risks" class="view" hidden></section>
-  <section id="v-forecast" class="view" hidden></section>
-  <section id="v-sources" class="view" hidden></section>
-</main>
-<div id="drawer" class="drawer" hidden>
-  <div class="drawer-in" role="dialog" aria-modal="true" aria-labelledby="dr-title">
-    <button id="dr-close" class="ghost close" type="button">Close</button>
-    <div id="dr-body"></div>
+<div class="banner-wrap" id="banner" role="status" aria-live="polite" hidden></div>
+<main id="main" class="wrap" tabindex="-1"></main>
+<nav class="bnav" id="bnav" aria-label="Sections"></nav>
+<div class="viewer" id="viewer" hidden>
+  <div class="viewer-in" role="dialog" aria-modal="true" aria-labelledby="viewer-path">
+    <div class="viewer-bar"><span class="p" id="viewer-path"></span><button class="btn small" type="button" id="viewer-close">Close</button></div>
+    <div class="md" id="viewer-body"></div>
   </div>
 </div>
 <script src="app.js"></script>
