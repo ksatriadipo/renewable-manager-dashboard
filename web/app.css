@@ -143,3 +143,6 @@ td.clip { max-width: 34ch; }
   .brand-sub { display: none; }
   .panel { padding: 12px; }
 }
+
+/* static (GitHub Pages) build: read-only */
+.static #new-task, .static #edit-task, .static #logout { display: none !important; }

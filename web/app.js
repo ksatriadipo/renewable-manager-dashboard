@@ -23,7 +23,18 @@
   function dayDiff(a, b) { if (!a || !b) return null; return Math.round((new Date(String(b).slice(0, 10) + "T00:00:00Z") - new Date(String(a).slice(0, 10) + "T00:00:00Z")) / 864e5); }
 
   /* ---------- API ---------- */
+  var STATIC = !!document.querySelector('meta[name="rmct-static"]');
+  if (STATIC) document.documentElement.classList.add("static");
+  function staticApi(method, path) {
+    if (method !== "GET") return Promise.reject(Object.assign(new Error("Read-only page: edits are made on the VPS"), { status: 405 }));
+    if (path === "/api/me") return Promise.resolve({ username: null, public_read: true, static: true });
+    if (path === "/api/dashboard") return fetch("data/dashboard.json", { cache: "no-store" }).then(function (r) { if (!r.ok) throw new Error("HTTP " + r.status); return r.json(); });
+    var m = /^\/api\/tasks\/([^/]+)(\/history)?$/.exec(path), t = m && D && D.tasks.filter(function (x) { return x.id === decodeURIComponent(m[1]); })[0];
+    if (!t) return Promise.reject(Object.assign(new Error("not found"), { status: 404 }));
+    return Promise.resolve(m[2] ? { task_id: t.id, history: t.history || [] } : t);
+  }
   function api(method, path, body) {
+    if (STATIC) return staticApi(method, path);
     var o = { method: method, credentials: "same-origin", headers: { Accept: "application/json" }, cache: "no-store" };
     if (method !== "GET") { o.headers["X-RMCT"] = "1"; o.headers["Content-Type"] = "application/json"; o.body = JSON.stringify(body || {}); }
     return fetch(path, o).then(function (r) {

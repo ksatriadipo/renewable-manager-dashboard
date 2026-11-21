@@ -16,6 +16,7 @@ def main(argv=None):
     t = sub.add_parser("setup-token", help="print a one-time setup token (create or reset a login)")
     t.add_argument("--hours", type=int, default=24)
     t.add_argument("--replica", action="store_true", help="deliver the token to the Codespaces replica with the next sync")
+    sub.add_parser("publish", help="primary: publish the read-only static build to the gh-pages branch")
     sub.add_parser("sync-push", help="primary: push a signed snapshot to the replica and replay replica edits")
     sub.add_parser("backup", help="consistent SQLite backup into the private backups folder")
     a = p.parse_args(argv)
@@ -50,6 +51,9 @@ def main(argv=None):
         print("one-time setup token (expires %s):\n%s" % (exp, tok))
         if base:
             print("setup link: %s/?setup=%s" % (base.rstrip("/"), tok))
+    elif a.cmd == "publish":
+        from . import publish
+        print(json.dumps(publish.publish(cfg)))
     elif a.cmd == "sync-push":
         from . import sync
         print(json.dumps(sync.push(cfg)))
