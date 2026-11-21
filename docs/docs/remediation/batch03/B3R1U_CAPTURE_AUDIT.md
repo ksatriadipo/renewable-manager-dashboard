@@ -95,3 +95,25 @@ HEAD `1e2392a`. EditMode b3r8 **2679/0/0/4** (r407 lock restored by r530b2). Bui
 | Corner close-up | NOT_TESTED (no route has a turn) |
 | Switch toggle / overview after ON→OFF | NOT_RECORDED (killed before) |
 B3-04 stays NEEDS_REWORK; switch OFF. Next round: r530c + r530f + r531b.
+
+## b3r9 / b3r9u — r530c + r530f + r531b, actual Goldmeadow (21 Nov 2026)
+HEAD `727d8c8` (r530c `5bc1fc1`, r530f `6c21978`, r531b `727d8c8`). EditMode **2706/0/0/4**. Build OK. uidev A57 + 960×540: 18 issues / 8 screens each, `shots_summary.json` written, **regression lock gagal 0 both profiles** (hang guard not triggered: max PNG gap 24.4 s, r531 block 316 s / cap 480 s). Perfshot: **lock FAIL 1 — `Tinggi_peta_jauh` same-frame sha1 ≠ `lama_peta_jauh`**; 281 px differ (AE, fuzz 2 %) of 2.5 M, no visible change, cable switch OFF in perfshot, same pair PASS in b3r8u → same class as G22 (sim state moves between same-frame shots); lock left FAIL (Auditor).
+player.log: `X15POWER: g18a_cable gardu=A15-B4A-GARDU-KIOSK-V001 kabel 3 tiang 18 konflik_rumah 0 dipindah 1 tanpa_rute 0`.
+
+| Cable (ON) | Houses crossed (exact/sampled) | Overhead min clearance | Underground min to footprint | Overhead / underground m | Poles | Max span | Min corner | Endpoints (kiosk / plant) | Off-land / water / no-build | Road adherence | Underground outside town |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| 1 | 0 / 0 | 8.0 m | 5.1 m | 180 / 132 | 6 | 41.2 m | 20.0 m | 0 / 0 m | 0 / 0 / 0 | 100 % | **8.0 m** |
+| 2 | 0 / 0 | 8.0 m | 5.1 m | 142 / 666 | 6 | 41.2 m | 16.0 m | 0 / 0 m | 0 / 0 / 0 | 100 % | **8.0 m** |
+| 3 | 0 / 0 | 8.0 m | 5.1 m | 144 / 132 | 6 | 41.2 m | 17.6 m | 0 / 0 m | 0 / 0 / 0 | 100 % | **8.0 m** |
+
+OFF (legacy straight line, no poles): legacy_known_r520 recorded, PASS (not a regression of ON). Overview after ON→OFF: no stale ON objects (PASS); switch toggle 3× + rebuilds: PASS. evidence_readonly_ok = 1 on every record. Island overview NOT_TESTED (island map deactivates the power root); no-route case NOT_TESTED (all 3 plants routed).
+Performance (VPS software renderer, 20 rebuilds per series, same start state):
+
+| Series | Plan ms median/P95/max | Main-thread rebuild ms | Frame spike ms |
+|---|---|---|---|
+| cold | 139 / 167 / 167 | 152 / 181 / 187 | 29 / 65 / 67 |
+| invalidated | 132 / 164 / 176 | 146 / 179 / 187 | 28 / 55 / 65 |
+| warm | 0 / 0 / 0 | 12 / 14 / 17 | 1.6 / 17 / 19 |
+Initial generation: plan 99.8 ms, main thread 114 ms. Planning runs on the main thread.
+
+**Outcome: CONDITIONAL PASS (geometry, endpoints, boundary, adherence, OFF/ON all PASS in the real world).** Open conditions: (1) underground runs 8.0 m outside the town edge at risers — owner ruling on the "underground only in town" rule; (2) perfshot same-frame lock FAIL (G22 class, not cable-related) — Auditor; (3) ~150 ms main-thread hitch on cold/invalidated rebuild measured on the VPS software renderer — device impact unknown (rebuilds happen on plant/geometry change only; warm 12 ms). B3-04 stays NEEDS_REWORK until the conditions are resolved; switch stays OFF.
