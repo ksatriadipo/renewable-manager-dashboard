@@ -304,7 +304,7 @@
     } else out.push(card("qa-patches", "Patches", '<p>patches[] ' + nr() + '</p><p class="note">Code vs visual status per patch appears once the data layer publishes patches[].</p>'));
     var rounds;
     if (qa && Array.isArray(qa.rounds)) {
-      rounds = qa.rounds.map(function (r) { return { id: r.id, date: r.date, em: r.editmode, build: r.build, uidev: r.uidev, perf: r.perfshot, doc: r.doc, v2: true }; });
+      rounds = qa.rounds.map(function (r) { return { id: r.id, date: r.date, em: r.editmode, build: r.build, uidev: r.uidev, perf: r.perfshot, locks: r.locks, doc: r.doc, v2: true }; });
     } else {
       rounds = arr(D.rounds).filter(function (r) { return r.era === "U37H" || arr(r.tests).length; }).map(function (r) {
         var t = lastTests(r); return { id: r.round, date: r.end_ts || r.day, em: t, build: null, uidev: null, perf: null, doc: null, v2: false, rollback: arr(r.rollback), rejected: arr(r.rejected_final), jobs: arr(r.jobs).map(function (j) { return j.job; }) };
@@ -325,15 +325,17 @@
     out.push(card("qa-chart", "EditMode per round", chart + (qa ? "" : fallbackNote("qa.rounds"))));
     function emCell(e) { return e && num(e.pass) != null ? '<span class="t-ok">' + e.pass + "</span> / " + (e.fail ? '<span class="t-bad">' + e.fail + "</span>" : "0") + ' <span class="dim small">skip ' + (e.skip || 0) + " · inc " + (e.inconclusive || 0) + "</span>" : nr(); }
     function uiCell(u) { if (!u || typeof u !== "object") return nr(); var k = Object.keys(u); return k.length ? k.map(function (p) { var x = obj(u[p]); return esc(p) + " " + esc(x.issues != null ? x.issues : "?") + " issues / " + esc(x.screens != null ? x.screens : "?"); }).join("<br>") : nr(); }
+    function lockCell(l) { return l && typeof l === "object" ? tag(l.state) + (l.failed ? ' <span class="t-bad small">' + esc(l.failed) + " failed</span>" : "") : nr(); }
     function perfCell(p) { return p && typeof p === "object" ? "pass " + esc(p.pass) + " · fail " + esc(p.fail) + " · precond " + esc(p.precondition_fail) : nr(); }
-    out.push(card("qa-rounds", "Rounds", '<div class="scroll-x"><table class="t"><thead><tr><th>Round</th><th>Date</th><th>EditMode pass/fail</th><th>Build</th><th>UI dev</th><th>PerfShot</th><th>Doc</th></tr></thead><tbody>' +
-      rounds.slice(0, ctx.ui.open["qa:all"] ? 400 : 15).map(function (r) { return '<tr><td class="mono">' + esc(r.id) + "</td><td>" + dateCell(r.date) + "</td><td>" + emCell(r.em) + "</td><td>" + (r.build ? tag(r.build) : nr()) + "</td><td>" + uiCell(r.uidev) + "</td><td>" + perfCell(r.perf) + "</td><td>" + docBtn(r.doc, "Doc") + "</td></tr>"; }).join("") +
+    out.push(card("qa-rounds", "Rounds", '<div class="scroll-x"><table class="t"><thead><tr><th>Round</th><th>Date</th><th>EditMode pass/fail</th><th>Build</th><th>UI dev</th><th>PerfShot</th><th>Regression lock</th><th>Doc</th></tr></thead><tbody>' +
+      rounds.slice(0, ctx.ui.open["qa:all"] ? 400 : 15).map(function (r) { return '<tr><td class="mono">' + esc(r.id) + "</td><td>" + dateCell(r.date) + "</td><td>" + emCell(r.em) + "</td><td>" + (r.build ? tag(r.build) : nr()) + "</td><td>" + uiCell(r.uidev) + "</td><td>" + perfCell(r.perf) + "</td><td>" + lockCell(r.locks) + "</td><td>" + docBtn(r.doc, "Doc") + "</td></tr>"; }).join("") +
       "</tbody></table></div>" + (rounds.length > 15 ? '<button class="btn small" type="button" data-toggle="qa:all">' + (ctx.ui.open["qa:all"] ? "Show latest 15" : "Show all " + rounds.length) + "</button>" : "") + (qa ? "" : fallbackNote("qa.rounds")), { cls: "span-all" }));
     var fails = [];
     rounds.forEach(function (r) {
       if (r.em && r.em.fail) fails.push({ id: r.id, date: r.date, what: "EditMode " + r.em.fail + " failed", doc: r.doc });
       if (r.build === "FAIL") fails.push({ id: r.id, date: r.date, what: "Build failed", doc: r.doc });
       if (r.perf && (r.perf.fail || r.perf.precondition_fail)) fails.push({ id: r.id, date: r.date, what: "PerfShot fail " + (r.perf.fail || 0) + " · precondition fail " + (r.perf.precondition_fail || 0), doc: r.doc });
+      if (r.locks && r.locks.failed) fails.push({ id: r.id, date: r.date, what: "Regression lock FAIL: " + arr(r.locks.items).slice(0, 4).map(function (i) { return i.source + " " + i.metric + "=" + i.value; }).join("; ") + (r.locks.failed > 4 ? " …" : ""), doc: r.doc });
       if (r.rollback && r.rollback.length) fails.push({ id: r.id, date: r.date, what: "Rollback: " + r.rollback.join(", "), doc: null });
       if (r.rejected && r.rejected.length) fails.push({ id: r.id, date: r.date, what: "Rejected: " + r.rejected.join(", "), doc: null });
     });
