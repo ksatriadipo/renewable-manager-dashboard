@@ -151,7 +151,7 @@
   function blockers(D) {
     if (Array.isArray(D.blockers)) return { v2: true, list: D.blockers };
     return { v2: false, list: arr(D.risks).map(function (r) { return { id: r.id, priority: NR, title: r.title + (r.description ? " — " + r.description : ""), workstream: NR, dependencies: [], owner: r.owner || NR,
-      identified: r.identified_at, status: r.status, active: r.status !== "RESOLVED", resolved: NR, next_action: r.plan || NR, doc: docPathOf(r), type: r.type, severity: r.severity, task: r.task_id }; }) };
+      identified: r.identified_at, status: r.status, active: r.status !== "RESOLVED", resolved: NR, next_action: r.plan || NR, doc: docPathOf(r) || docPathOf(arr(D.tasks).filter(function (t) { return t.id === r.task_id; })[0]), type: r.type, severity: r.severity, task: r.task_id }; }) };
   }
   function isActiveWs(w) { var c = obj(w.counts); return (c.IN_PROGRESS || 0) > 0; }
   function prioRank(p) { var m = /^P(\d)$/.exec(p || ""); return m ? +m[1] : 9; }
