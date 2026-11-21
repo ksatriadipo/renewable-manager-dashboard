@@ -163,3 +163,15 @@ details.toggle > summary::-webkit-details-marker { display: none; }
   .span-all { grid-column: 1 / -1; }
   .kpis.six { grid-template-columns: repeat(6, minmax(0, 1fr)); }
 }
+
+/* ---- browser acceptance fixes 21 Nov (Chromium 360×800 + 1440×900): no horizontal overflow, no mid-word stat labels,
+   content never hidden behind the mobile bottom nav ---- */
+.card, .card a, .mono, .doclink { overflow-wrap: anywhere; }
+.card svg { max-width: 100%; height: auto; }
+.tag { white-space: normal; max-width: 100%; overflow-wrap: anywhere; }
+.kpi .l { overflow-wrap: normal; word-break: normal; hyphens: auto; }
+.wrap { padding-bottom: calc(132px + env(safe-area-inset-bottom)); }
+@media (min-width: 960px) {
+  .wrap { padding-bottom: 40px; }
+  .kpis.six { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}

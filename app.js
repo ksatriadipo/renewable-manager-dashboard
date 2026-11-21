@@ -531,7 +531,7 @@
   var lastFocus = null;
   function openDoc(p) {
     var v = $("#viewer"), body = $("#viewer-body"), r = resolveDoc(S.D, p);
-    lastFocus = doc.activeElement; $("#viewer-path").textContent = r.url + (r.indexed ? "" : "  (not in docs index)");
+    lastFocus = doc.activeElement; $("#viewer-path").textContent = String(p).replace(/:\d+$/, "") + (r.indexed ? "" : "  (not in docs index)");   // repo path (published copy lives under docs/<repo path>)
     body.innerHTML = '<p class="dim">Loading…</p>'; v.hidden = false; $("#viewer-close").focus();
     root.fetch(r.url, { cache: "no-store", credentials: "same-origin" }).then(function (res) { if (!res.ok) throw new Error("HTTP " + res.status); return res.text(); })
       .then(function (t) { body.innerHTML = md(t, String(p).replace(/:\d+$/, "")); body.scrollTop = 0; })
