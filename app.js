@@ -424,6 +424,14 @@
     var tl = obj(R.timeline), ct = obj(R.closed_testing), pa = obj(R.production_access), ts_ = obj(R.testers);
     out.push(card("rel-tl", "1 · Release timeline (PROVISIONAL)", relTable(["Phase", "Target", "Gate", "Status", "Evidence"], tl.phases, function (p) { return "<tr><td><b class=\"mono\">" + esc(p.Phase) + "</b> " + esc(p.Name) + "</td>" + cell(p.Target) + '<td class="mono">' + esc(p.Gate) + "</td><td>" + tag(p.status) + "</td>" + cell(p.Evidence) + "</tr>"; }) +
       '<div class="small" style="margin-top:8px">Separate gates: ' + arr(R.gates).map(function (g) { return '<span class="mono">' + esc(g.id) + "</span> " + tag(g.passed ? "PASS" : "NOT_STARTED"); }).join(" · ") + '</div><p class="note">Dates are planning anchors; release follows readiness. Engineering complete ≠ Play compliance ≠ closed testing ≠ production access ≠ soft launch ≠ rollout.</p>', { cls: "span-all", right: dl("timeline") }));
+    var sc = obj(R.status_cards);
+    out.push(card("rel-cards", "Release readiness status", arr(sc.items).length ? '<div class="relcards">' + arr(sc.items).map(function (c) {
+      return '<div class="relcard" data-card="' + esc(c.id) + '"><div class="relcard-h">' + esc(c.title) + "</div><div>" + tag(c.status) + "</div>" +
+        (c.derived && c.derived !== c.status ? '<div class="small dim">register-derived: ' + tag(c.derived) + "</div>" : "") +
+        (c.basis ? '<div class="small">' + esc(c.basis) + "</div>" : "") +
+        (arr(c.missing).length ? '<div class="small dim">Missing: ' + arr(c.missing).map(esc).join(", ") + "</div>" : "") +
+        '<div class="small dim">' + (c.evidence_ok ? "Evidence: " + esc(c.evidence) : '<span class="t-bad">no evidence</span>') + "</div></div>";
+    }).join("") + "</div>" + '<p class="note">Projection of the release Markdown (addendum status cards first, register-derived status shown when it differs). A DONE the register does not support is shown as UNVERIFIED. Production access is never guaranteed after 14 days.</p>' : '<p class="empty">' + nr() + "</p>", { cls: "span-all", right: docBtn(sc.doc, "Doc") }));
     out.push(card("rel-ready", "2 · Play Console readiness", relSummary(obj(R.readiness).summary) + statusRows(obj(R.readiness).items), { right: dl("readiness") }));
     out.push(card("rel-acct", "3 · Account verification", relSummary(obj(R.account).summary) + statusRows(obj(R.account).items) + '<p class="note">UNVERIFIED rows need the owner to confirm in Play Console.</p>', { right: dl("account") }));
     out.push(card("rel-test", "4 · Tester recruitment", '<div class="kpis">' + kpi(ts_.invited, "Invited", "invitations do not count") + kpi((ts_.opted_in || 0) + " / " + (ts_.target || 12), "Opted in now", "pseudonymous IDs only", (ts_.opted_in || 0) >= (ts_.target || 12) ? "#5fe39a" : "#ffb454") + "</div>" +

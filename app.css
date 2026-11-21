@@ -164,6 +164,11 @@ details.toggle > summary::-webkit-details-marker { display: none; }
   .kpis.six { grid-template-columns: repeat(6, minmax(0, 1fr)); }
 }
 
+/* release readiness status cards (21 Nov): auto-fit grid, wraps at 360 px without page overflow */
+.relcards { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+.relcard { min-width: 0; border: 1px solid rgba(255,255,255,.08); border-radius: 10px; padding: 10px; background: rgba(255,255,255,.02); display: flex; flex-direction: column; gap: 6px; overflow-wrap: anywhere; }
+.relcard-h { font-weight: 600; }
+
 /* ---- browser acceptance fixes 21 Nov (Chromium 360×800 + 1440×900): no horizontal overflow, no mid-word stat labels,
    content never hidden behind the mobile bottom nav ---- */
 .card, .card a, .mono, .doclink { overflow-wrap: anywhere; }
