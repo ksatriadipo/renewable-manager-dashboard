@@ -23,3 +23,13 @@ Visual evidence = screenshots only; code tests are not visual proof. All capture
 | `44_office_mission` | `44_beranda_mission_dialog` | Beranda plaza (`_interior = false; Select("office")`) + Erina mission dialog; not the office interior |
 
 Comparison tooling: `rollback.judge` locks are keyed by capture job/profile + metric, not by PNG name, so the rename cannot register as a missing lock. Visual before/after pairing for this shot uses this table (manual baseline mapping). Office camera behaviour and the step scenario are not modified.
+
+## b3r2u — r524 HQ gate (Unity, 21 Nov 2026)
+EditMode b3r2 2597/0/0/4. uidev A57 21 issues / 9 screens (+3 = `69_garage` "lompatan-tata-letak" only, unrelated to r524 QA-only change → recheck in b3r3u), 960×540 18/8; regress lock gagal 0; judge regressions 0.
+
+| Profile | Shot | Verdict (tool) | Visual review | Metrics |
+|---|---|---|---|---|
+| A57 | 88_hq_gate_progress | PASS | PASS — gate card "Tingkat HQ berikutnya: Tingkat 2" open, 4 rows fully visible inside modal + safe area (card x 157 > inset 96), badges Beres×3 / Belum×1 = data mw/level/spent met, row3 todo | req 4, met 3, rows_visible 4, rows_covered 0, panel hq_gate_card |
+| 960×540 | 88_hq_gate_progress | PASS | PASS — same card, all 4 rows + badges visible | req 4, met 3, rows_visible 4, rows_covered 0 |
+
+r522 false PASS (b3r1u) is not repeated. Runtime occlusion with two rendered elements = r529b in b3r3u (NOT_TESTED until then).
