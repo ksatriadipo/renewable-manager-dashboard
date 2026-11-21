@@ -175,3 +175,10 @@ details.toggle > summary::-webkit-details-marker { display: none; }
   .wrap { padding-bottom: 40px; }
   .kpis.six { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
+/* tables keep whole words and scroll inside their own card (no page overflow); bottom nav labels fit 8 tabs at 360 px */
+.scroll-x table.t, .tw table { min-width: 620px; }
+.scroll-x table.t td, .scroll-x table.t th, .tw td, .tw th { overflow-wrap: normal; word-break: normal; }
+.scroll-x .tag, .tw .tag { white-space: nowrap; }
+.scroll-x, .tw { overflow-x: auto; -webkit-overflow-scrolling: touch; max-width: 100%; }
+.bnav a { font-size: 10px; letter-spacing: 0; min-width: 0; overflow: hidden; text-align: center; padding: 0 1px; }
+.bnav a svg { width: 20px; height: 20px; }
