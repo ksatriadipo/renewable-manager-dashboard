@@ -26,7 +26,8 @@
   var COLORS = { NOT_STARTED: "#9aa3cf", READY: "#7cc4ff", IN_PROGRESS: "#45e3d4", IMPLEMENTED: "#b195ff", TESTED: "#6aa8ff", ACCEPTED: "#9be7b8",
     VISUALLY_ACCEPTED: "#2fd3c3", DONE: "#5fe39a", BLOCKED: "#ff6b78", ON_HOLD: "#ffb454", DEFERRED: "#d9b3ff", CANCELLED: "#8f96bb", REJECTED: "#ff8fa0",
     NEEDS_REWORK: "#ff9f5a", NEEDS_RECHECK: "#ffb454", NOT_TESTED: "#9aa3cf", FAIL: "#ff6b78", PASS: "#5fe39a", OK: "#5fe39a", OPEN: "#ff6b78", RESOLVED: "#5fe39a",
-    P0: "#ff6b78", P1: "#ffb454", P2: "#f6c85a", P3: "#9aa3cf", FRESH: "#5fe39a", STALE: "#ffb454", FAILED: "#ff6b78", RED: "#ff6b78", AMBER: "#ffb454", GREEN: "#5fe39a", PAUSED: "#ffb454" };
+    P0: "#ff6b78", P1: "#ffb454", P2: "#f6c85a", P3: "#9aa3cf", FRESH: "#5fe39a", STALE: "#ffb454", FAILED: "#ff6b78", RED: "#ff6b78", AMBER: "#ffb454", GREEN: "#5fe39a", PAUSED: "#ffb454",
+    PARTIAL: "#ffb454", UNVERIFIED: "#ff9f5a", CONFIRMED: "#5fe39a", RECORDED: "#7cc4ff", NOT_CONNECTED: "#9aa3cf", "N/A": "#8f96bb" };
   function col(s) { return COLORS[String(s || "").toUpperCase().replace(/ /g, "_")] || "#b3badf"; }
   function label(s) { return String(s).replace(/_/g, " "); }
   function tag(s) { return isNR(s) ? nr(s) : '<span class="tag" style="color:' + col(s) + '">' + esc(label(s)) + "</span>"; }
@@ -407,6 +408,42 @@
     return { title: "Activity", sub: "Newest first · " + it.length + " recorded events", cards: [card("act", "Activity feed", body, { cls: "span-all" })], grid: "grid" };
   }
 
+  /* ---------- H: release management (projection of docs/release/RELEASE_REGISTER.md + GOOGLE_PLAY_RELEASE_PLAN.md) ---------- */
+  function relTable(cols, rows, fn, empty) {
+    rows = arr(rows);
+    if (!rows.length) return '<p class="empty">' + esc(empty || "None recorded.") + "</p>";
+    return '<div class="scroll-x"><table class="t"><thead><tr>' + cols.map(function (c) { return "<th>" + esc(c) + "</th>"; }).join("") + "</tr></thead><tbody>" + rows.map(fn).join("") + "</tbody></table></div>";
+  }
+  function cell(v) { return "<td>" + (isNR(v) || v === "—" ? nr(v) : esc(v)) + "</td>"; }
+  function relSummary(s) { s = obj(s); var c = obj(s.counts); return '<div class="legend">' + Object.keys(c).map(function (k) { return "<span>" + sw(col(k)) + esc(label(k)) + " " + c[k] + "</span>"; }).join("") + "</div>"; }
+  function statusRows(items) { return relTable(["Item", "Status", "Evidence"], items, function (r) { return '<tr><td>' + esc(r.Item) + (r.Requirement ? '<div class="dim small">' + esc(r.Requirement) + "</div>" : "") + (r.Value ? '<div class="dim small">' + esc(r.Value) + "</div>" : "") + "</td><td>" + tag(r.status) + "</td><td class=\"small\">" + (r.evidence_ok ? esc(r.Evidence) : '<span class="t-bad">' + esc(r.Evidence || "no evidence") + "</span>") + "</td></tr>"; }); }
+  function vRelease(D, now, ctx) {
+    var R = obj(D.release), out = [];
+    if (!has(D, "release") || R.state !== "RECORDED") return { title: "Release management", sub: "release " + NR, cards: [card("rel-none", "Release records", "<p>release " + nr(R.state) + " — expected docs/release/RELEASE_REGISTER.md and GOOGLE_PLAY_RELEASE_PLAN.md.</p>", { cls: "span-all" })], grid: "grid" };
+    function dl(k) { return docBtn(obj(R[k]).doc, "Doc"); }
+    var tl = obj(R.timeline), ct = obj(R.closed_testing), pa = obj(R.production_access), ts_ = obj(R.testers);
+    out.push(card("rel-tl", "1 · Release timeline (PROVISIONAL)", relTable(["Phase", "Target", "Gate", "Status", "Evidence"], tl.phases, function (p) { return "<tr><td><b class=\"mono\">" + esc(p.Phase) + "</b> " + esc(p.Name) + "</td>" + cell(p.Target) + '<td class="mono">' + esc(p.Gate) + "</td><td>" + tag(p.status) + "</td>" + cell(p.Evidence) + "</tr>"; }) +
+      '<div class="small" style="margin-top:8px">Separate gates: ' + arr(R.gates).map(function (g) { return '<span class="mono">' + esc(g.id) + "</span> " + tag(g.passed ? "PASS" : "NOT_STARTED"); }).join(" · ") + '</div><p class="note">Dates are planning anchors; release follows readiness. Engineering complete ≠ Play compliance ≠ closed testing ≠ production access ≠ soft launch ≠ rollout.</p>', { cls: "span-all", right: dl("timeline") }));
+    out.push(card("rel-ready", "2 · Play Console readiness", relSummary(obj(R.readiness).summary) + statusRows(obj(R.readiness).items), { right: dl("readiness") }));
+    out.push(card("rel-acct", "3 · Account verification", relSummary(obj(R.account).summary) + statusRows(obj(R.account).items) + '<p class="note">UNVERIFIED rows need the owner to confirm in Play Console.</p>', { right: dl("account") }));
+    out.push(card("rel-test", "4 · Tester recruitment", '<div class="kpis">' + kpi(ts_.invited, "Invited", "invitations do not count") + kpi((ts_.opted_in || 0) + " / " + (ts_.target || 12), "Opted in now", "pseudonymous IDs only", (ts_.opted_in || 0) >= (ts_.target || 12) ? "#5fe39a" : "#ffb454") + "</div>" +
+      relTable(["ID", "Invited", "Opted in", "Opted out", "Active days", "Last build", "Feedback"], ts_.items, function (t) { return '<tr><td class="mono">' + esc(t.id) + "</td>" + cell(t.invited) + cell(t.opted_in) + cell(t.opted_out) + cell(t.active_days) + cell(t.last_build) + cell(t.feedback_count) + "</tr>"; }, "No tester recorded yet."), { right: dl("testers") }));
+    var day = num(ct.consecutive_days) || 0, req = ct.required_days || 14;
+    out.push(card("rel-ct", "5 · Closed testing progress", '<div class="kpis">' + kpi(Math.min(day, req) + " / " + req, "Consecutive days with ≥ " + (ct.required_testers || 12) + " opted in", "starts on first day with ≥ 12 opted in", day >= req ? "#5fe39a" : "#ffb454") +
+      kpi(ct.testers_14d + " / " + (ct.required_testers || 12), "Testers opted in ≥ 14 days", "") + kpi(ct.start, "Counter start", "recorded: " + esc(ct.recorded_start)) + kpi(ct.qualified ? ct.qualified_date : "NOT_STARTED", "Qualified", "", ct.qualified ? "#5fe39a" : null) + "</div>" +
+      progRow("14-day window", Math.round(100 * Math.min(day, req) / req), "#45e3d4", "") + '<p class="small">Track: ' + tag(ct.track) + "</p>", { right: dl("closed_testing") }));
+    out.push(card("rel-pa", "6 · Production access", '<div class="row">Eligible ' + tag(pa.eligible ? "PASS" : "NOT_STARTED") + " · granted " + tag(pa.granted ? "DONE" : "NOT_STARTED") + "</div>" +
+      relTable(["Date", "Event", "Result", "Evidence"], pa.log, function (r) { return "<tr>" + cell(r.Date) + cell(r.Event) + cell(r.Result) + cell(r.Evidence) + "</tr>"; }, "No application recorded.") +
+      list(pa.rules, function (r) { return '<li class="small"><span class="mono">' + esc(r.ID) + "</span> " + tag(r.status) + " " + esc(r.Rule) + ' <span class="dim">' + esc(r.Source) + "</span></li>"; }, ""), { right: dl("production_access") }));
+    out.push(card("rel-list", "7 · Store listing checklist", relSummary(obj(R.listing).summary) + statusRows(obj(R.listing).items), { right: dl("listing") }));
+    out.push(card("rel-mk", "8 · Soft-launch markets", relTable(["Market", "Code", "Phase", "Availability", "Rollout %", "Status"], obj(R.markets).items, function (m) { return "<tr>" + cell(m.Market) + '<td class="mono">' + esc(m["Country code"]) + "</td>" + cell(m.Phase) + cell(m.Availability) + cell(m["Rollout %"]) + "<td>" + tag(m.status) + "</td></tr>"; }) + '<p class="note">Staged rollout applies to updates only; the first production release cannot be staged.</p>', { right: dl("markets") }));
+    out.push(card("rel-rc", "9 · Release candidates", relTable(["RC", "Version", "Code", "Commit", "Track", "Build evidence", "Status"], obj(R.rc).items, function (r) { return '<tr><td class="mono">' + esc(r.RC) + "</td>" + cell(r["Version name"]) + cell(r["Version code"]) + '<td class="mono">' + esc(r.Commit) + "</td>" + cell(r.Track) + cell(r["Build evidence"]) + "<td>" + tag(r.status) + "</td></tr>"; }, "No release candidate yet (no AAB built)."), { right: dl("rc") }));
+    out.push(card("rel-kpi", "10 · Launch KPIs — target vs actual", relTable(["KPI", "Target", "Actual", "Source"], obj(R.kpis).items, function (k) { return "<tr>" + cell(k.kpi) + cell(k.target) + "<td>" + (isNR(k.actual) ? nr(k.actual) : esc(k.actual)) + "</td><td>" + tag(k.source) + "</td></tr>"; }), { cls: "span-all", right: dl("kpis") }));
+    var pr = arr(R.problems);
+    if (pr.length) out.push(card("rel-pr", "Record problems", list(pr, function (x) { return '<li class="small t-bad">' + esc(x) + "</li>"; }), { cls: "span-all crit" }));
+    return { title: "Release management", sub: "Google Play · projection of the release Markdown records as of " + esc(R.as_of), cards: out, grid: "grid two" };
+  }
+
   var VIEWS = [
     { id: "overview", name: "Executive overview", short: "Overview", fn: vOverview, icon: '<path d="M3 13h8V3H3zm10 8h8V11h-8zM3 21h8v-6H3zm10-18v6h8V3z"/>' },
     { id: "workstreams", name: "Workstreams", short: "Streams", fn: vWorkstreams, icon: '<path d="M4 6h16v2H4zm0 5h10v2H4zm0 5h13v2H4z"/>' },
@@ -414,6 +451,7 @@
     { id: "qa", name: "Engineering & QA", short: "QA", fn: vQA, icon: '<path d="M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4z"/>' },
     { id: "blockers", name: "Blockers & risks", short: "Blockers", fn: vBlockers, icon: '<path d="M12 2 1 21h22zm1 15h-2v-2h2zm0-4h-2V9h2z"/>' },
     { id: "resources", name: "Resources & agents", short: "Agents", fn: vResources, icon: '<path d="M12 12a4 4 0 1 0-4-4 4 4 0 0 0 4 4zm0 2c-3 0-8 1.5-8 4.5V21h16v-2.5c0-3-5-4.5-8-4.5z"/>' },
+    { id: "release", name: "Release management", short: "Release", fn: vRelease, icon: '<path d="M12 2c3 2 5 6 5 10l-2 4H9l-2-4c0-4 2-8 5-10zm0 6a2 2 0 1 0 0 4 2 2 0 0 0 0-4zM8 18h8l-1 4H9z"/>' },
     { id: "activity", name: "Activity", short: "Feed", fn: vActivity, icon: '<path d="M3 12h4l3-8 4 16 3-8h4"/>' }
   ];
   function renderView(id, D, now, ctx) {
