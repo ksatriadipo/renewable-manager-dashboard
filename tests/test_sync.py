@@ -130,3 +130,34 @@ class SyncTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class PublicReadTest(unittest.TestCase):
+    def test_public_read_allows_get_but_not_edit(self):
+        cfg = dict(make_cfg(), public_read=True)
+        run.ingest(cfg, trigger="test")
+        srv = make_server(cfg, bind="127.0.0.1", port=0)
+        port = srv.server_address[1]
+        threading.Thread(target=srv.serve_forever, daemon=True).start()
+        try:
+            def req(method, path, body=None):
+                c = http.client.HTTPConnection("127.0.0.1", port, timeout=30)
+                c.request(method, path, body=json.dumps(body).encode() if body is not None else None, headers={"X-RMCT": "1", "Content-Type": "application/json"})
+                r = c.getresponse()
+                data = r.read()
+                c.close()
+                return r.status, data
+            st, b = req("GET", "/api/me")
+            self.assertEqual(st, 200)
+            self.assertTrue(json.loads(b)["public_read"])
+            self.assertIsNone(json.loads(b)["username"])
+            st, b = req("GET", "/api/dashboard")
+            self.assertEqual(st, 200)
+            tid = json.loads(b)["tasks"][0]["id"]
+            self.assertEqual(req("GET", "/api/tasks/" + tid)[0], 200)
+            self.assertEqual(req("PATCH", "/api/tasks/" + tid, {"note": "x"})[0], 401)
+            self.assertEqual(req("POST", "/api/tasks", {"title": "x"})[0], 401)
+            self.assertEqual(req("POST", "/api/ingest", {})[0], 401)
+        finally:
+            srv.shutdown()
+            srv.server_close()

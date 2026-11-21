@@ -131,6 +131,19 @@ class App:
                     con.close()
             return self._cache
 
+    def maybe_update(self, rev):
+        """Replica only: when a VERIFIED snapshot names a newer commit of this repo, fast-forward from GitHub and restart.
+        Code always comes from the repository's own origin/main (never from the payload); a non-fast-forward is refused."""
+        script = self.cfg.get("self_update")
+        if not script or not re.match(r"^[0-9a-f]{40}$", rev or ""):
+            return
+        import subprocess
+        head = subprocess.run(["git", "-C", HERE, "rev-parse", "HEAD"], capture_output=True, text=True).stdout.strip()
+        if head == rev:
+            return
+        subprocess.Popen(["bash", script, rev], cwd=HERE, start_new_session=True,
+                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
     def run_ingest(self, trigger):
         if self.cfg.get("mode") == "replica":
             raise ApiError(409, "this is a read replica: data is refreshed from the VPS automatically")
@@ -264,10 +277,12 @@ def make_handler(app):
                 if path == "/api/login" and method == "POST":
                     return self.api_login(con)
                 user = auth.session_user(con, self.token())
-                if not user:
+                public_get = bool(app.cfg.get("public_read")) and method == "GET" and (
+                    path in ("/api/me", "/api/dashboard") or re.match(r"^/api/tasks/[^/]+(/history)?$", path))
+                if path == "/api/me" and method == "GET" and (user or public_get):
+                    return self.send(200, {"username": user, "public_read": bool(app.cfg.get("public_read"))})
+                if not user and not public_get:
                     raise ApiError(401, "authentication required")
-                if path == "/api/me" and method == "GET":
-                    return self.send(200, {"username": user})
                 if path == "/api/logout" and method == "POST":
                     auth.logout(con, self.token())
                     audit(con, user, "logout", {}, self.ip())
@@ -372,7 +387,7 @@ def make_handler(app):
                 raise ApiError(413, "bad snapshot size")
             raw = self.rfile.read(n)
             try:
-                pending = sync.apply(con, raw, self.headers.get("X-RMCT-Signature"), app.cfg["allowed_signers"])
+                pending = sync.apply(con, raw, self.headers.get("X-RMCT-Signature"), app.cfg["allowed_signers"], update_hook=app.maybe_update)
             except ValueError as e:
                 auth.rate_hit("sync:" + self.ip())
                 audit(con, "", "sync_rejected", {"reason": str(e)}, self.ip())

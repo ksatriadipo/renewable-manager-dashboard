@@ -24,7 +24,7 @@ def _cols(con, table):
 
 
 # ------------------------------------------------------------------ primary side
-def export(con, ack_upto):
+def export(con, ack_upto, code_rev=None):
     tables = {}
     for t in DATA_TABLES:
         cols = _cols(con, t)
@@ -32,7 +32,7 @@ def export(con, ack_upto):
     seq = int(db.get_fact(con, "sync_seq", 0) or 0) + 1
     db.set_fact(con, "sync_seq", seq)
     tokens = [dict(r) for r in con.execute("SELECT token_hash, expires_at FROM pending_setup_tokens WHERE expires_at > ?", (db.now(),))]
-    return {"v": 1, "seq": seq, "at": db.now(), "ack_upto": ack_upto, "setup_tokens": tokens, "tables": tables}
+    return {"v": 1, "seq": seq, "at": db.now(), "ack_upto": ack_upto, "setup_tokens": tokens, "tables": tables, "code_rev": code_rev}
 
 
 def sign(data, key_path):
@@ -95,7 +95,11 @@ def push(cfg):
     try:
         ack = int(db.get_fact(con, "replica_ack", 0) or 0)
         con.execute("BEGIN IMMEDIATE")
-        snap = export(con, ack)
+        rev = None
+        if cfg.get("code_repo"):
+            r = subprocess.run(["git", "-C", cfg["code_repo"], "rev-parse", "origin/main"], capture_output=True, text=True)
+            rev = r.stdout.strip() or None
+        snap = export(con, ack, rev)
         con.execute("COMMIT")
         body = gzip.compress(json.dumps(snap, default=str).encode())
         sig = sign(body, key)
@@ -120,7 +124,7 @@ def add_setup_token_hash(con, token_hash, expires_at):
 
 
 # ------------------------------------------------------------------ replica side
-def apply(con, raw, sig_b64, allowed_signers):
+def apply(con, raw, sig_b64, allowed_signers, update_hook=None):
     """Verify + apply a snapshot. Returns un-acked outbox rows for the primary. Raises ValueError on any rejection."""
     try:
         sig = base64.b64decode(sig_b64 or "", validate=True)
@@ -159,6 +163,9 @@ def apply(con, raw, sig_b64, allowed_signers):
     except Exception:
         con.execute("ROLLBACK")
         raise
+    want = snap.get("code_rev")
+    if want and update_hook:
+        update_hook(want)
     return pending
 
 

@@ -581,7 +581,7 @@
   }
   function showLogin(msg) {
     D = null;
-    var f = authShell("Sign in", "Private project dashboard. Access is limited to the project owner.", '<label>Username<input name="username" autocomplete="username" autocapitalize="none" required></label><label>Password<input name="password" type="password" autocomplete="current-password" required></label>', "Sign in");
+    var f = authShell("Sign in", (window.RMCT_PUBLIC ? "Viewing is open. Sign in only to create or edit tasks." : "Private project dashboard. Access is limited to the project owner."), '<label>Username<input name="username" autocomplete="username" autocapitalize="none" required></label><label>Password<input name="password" type="password" autocomplete="current-password" required></label>', "Sign in");
     if (msg) $("#auth-msg").innerHTML = (msg === "Signed out." ? '<div class="ok">' : '<div class="err">') + esc(msg) + "</div>";
     f.addEventListener("submit", function (ev) {
       ev.preventDefault(); var b = f.querySelector("button"), m = $("#auth-msg"), u = f.username.value.trim(), p = f.password.value;
@@ -620,18 +620,22 @@
       var li = obj(D.meta.last_ingestion), ts = li.finished_at || li.at || D.meta.generated_at || "";
       $("#fresh").textContent = ts ? "synced " + String(ts).replace("T", " ").slice(0, 16) + " UTC" : "sync time unknown";
       var hp = $("#health"); hp.outerHTML = healthPill(); $("#health").hidden = false;
-      $("#tabs").hidden = false; $("#reload").hidden = false; $("#logout").hidden = !ME;
+      $("#tabs").hidden = false; $("#reload").hidden = false; $("#logout").hidden = false;
+      $("#logout").textContent = ME && ME.username ? "Sign out" : "Sign in to edit";
       route();
     }).catch(function (e) { if (e && e.status === 401) { showLogin(); return; } D = null; showFatal("Dashboard data could not be loaded: " + (e && e.message)); });
   }
   function boot() {
     var m = /[?&]setup=([^&#]+)/.exec(location.search || "");
     if (m) { showSetup(decodeURIComponent(m[1])); return Promise.resolve(); }
-    return api("GET", "/api/me").then(function (me) { ME = me || {}; return loadDashboard(); })
+    return api("GET", "/api/me").then(function (me) { ME = me || {}; window.RMCT_PUBLIC = !!ME.public_read; return loadDashboard(); })
       .catch(function (e) { if (e && e.status === 401) showLogin(); else showFatal("Server not reachable: " + (e && e.message)); });
   }
   $("#reload").addEventListener("click", function () { loadDashboard(); });
-  $("#logout").addEventListener("click", function () { api("POST", "/api/logout", {}).catch(function () { return null; }).then(function () { ME = null; showLogin("Signed out."); }); });
+  $("#logout").addEventListener("click", function () {
+    if (!(ME && ME.username)) { showLogin(); return; }
+    api("POST", "/api/logout", {}).catch(function () { return null; }).then(function () { ME = null; if (window.RMCT_PUBLIC) { boot(); } else { showLogin("Signed out."); } });
+  });
 
   window.RMCT = { tl: TL, normalize: normalize, setData: function (d) { D = normalize(d); IDX = {}; D.tasks.forEach(function (t) { IDX[t.id] = t; }); }, views: R, openTask: openTask, openForm: openForm, route: route, showLogin: showLogin, showSetup: showSetup };
   if (!window.RMCT_NO_BOOT) boot();
