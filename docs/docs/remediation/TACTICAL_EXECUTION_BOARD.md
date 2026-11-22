@@ -65,6 +65,8 @@ Day = working day. H1 = Fri 20 Nov 2026. Target dates assume Mon–Fri.
 | B3-09 | G16c initial camera per aspect ratio (U2-018) | B3-07 | AGN | 0.2 / 0.4 d | WAITING | — | Same framing across profiles |
 | B3-10 | G22 uidev step hq_gate (U2-023) | — | AGN (QA tool, AUD review) | 0.2 / 0.3 d | CAN START after M4 | — | Capture step reaches its state; precondition checks unchanged |
 
+**Batch 3 backlog (not on the 10-task board, not in M5):** G23 region layout data (map geometry; register B3-G23) — placed here 22 Nov by Director D-6e1ca40a6f20 (Codex SG-983acab9415b); owner Lead (orchestrator); dependencies recorded when it is broken into tasks; re-placed if B4–B8 scope is set. Closes DEP-G23.
+
 ## Validation (M6–M7)
 
 | ID | Task | Owner | Gate | Status |

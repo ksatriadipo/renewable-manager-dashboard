@@ -486,6 +486,11 @@
       return arr(b.exclusively_blocked).length - arr(a.exclusively_blocked).length || (arr(b.direct).length + arr(b.transitive).length) - (arr(a.direct).length + arr(a.transitive).length);
     });
   }
+  function msRule(g) {
+    var o = arr(g.outstanding_exit_criteria), r = g.rollup_rule;
+    return (o.length ? '<div class="small">' + tag("OUTSTANDING EXIT") + " " + o.map(esc).join(" · ") + "</div>" : "") +
+      (r ? '<div class="small dim">Rollup: ' + esc(arr(r.not_technically_ready_buckets).join(", ")) + " not counted as technically ready (" + esc(r.source || "") + "); reclassified " + esc(arr(r.reclassified).join(" ")) + "</div>" : "");
+  }
   function nextMilestone(D) {
     var groups = {}; arr(obj(PM(D).reconciliation).groups).forEach(function (g) { groups[g.group] = g; });
     var pg = {}; arr(PG(D).by_milestone).forEach(function (g) { pg[g.group] = g; });
@@ -528,7 +533,7 @@
     out.push(card("mc-workers", "Active workers & next milestone",
       list(act, function (w) { return '<li><div class="row sb"><b>' + esc(w.role || w.id) + "</b><span class=\"small dim\">capacity " + val(w.capacity_h_per_week) + "</span></div><div>" + ids(w.active) + "</div></li>"; }, "No worker has an active task recorded.") +
       (nm ? '<div class="ms-next"><div class="row">' + tag("NEXT MILESTONE") + ' <b class="mono">' + esc(nm.m.id) + "</b> " + esc(nm.m.name || "") + '</div><div class="small muted">Target ' + val(nm.m.target) + " · exit: " + val(nm.m.exit) + "</div>" +
-        (nm.p ? segBar(nm.p.segments, 12) + '<div class="small dim">' + esc(nm.p.equation) + "</div>" : nm.g ? stackBar(nm.g.counts, bucketsOf(D), 10) + '<div class="small dim">' + esc(nm.g.equation) + "</div>" : "") + "</div>" : '<p class="empty">No open milestone recorded.</p>'),
+        (nm.p ? segBar(nm.p.segments, 12) + '<div class="small dim">' + esc(nm.p.equation) + "</div>" + msRule(nm.p) : nm.g ? stackBar(nm.g.counts, bucketsOf(D), 10) + '<div class="small dim">' + esc(nm.g.equation) + "</div>" : "") + "</div>" : '<p class="empty">No open milestone recorded.</p>'),
       { right: '<a class="btn small" href="#workers">Workers</a>' }));
     return { title: "Mission Control", sub: "Are we on track? Health, primary KPIs, bottleneck and the decisions needed now", cards: out, grid: "grid two" };
   }
@@ -611,7 +616,7 @@
       more("mp:def", "Definitions", kv([["Denominator", val(obj(M.denominator).rule)], ["DONE rule", esc(JSON.stringify(obj(P.status_mapping).done_rule))], ["Technical readiness", esc(arr(obj(M.technical_ready).buckets).join(" + "))],
         ["Remaining", val(obj(M.remaining_base).note)], ["Buckets", esc(B.join(" · ")) + " (mutually exclusive)"]]), ctx), { cls: "span-all" }));
     if (hasPG(D)) out.push(card("mp-prog", "Progress segments per milestone", '<div class="scroll-x"><table class="t"><thead><tr><th>Group</th><th>Accepted · awaiting acceptance · not technically ready</th><th class="num">Launch tasks</th><th>Equation</th><th>Check</th></tr></thead><tbody>' +
-      arr(PGd.by_milestone).map(function (g) { var m = mm[g.group]; return '<tr><td><b class="mono">' + esc(g.group) + "</b>" + (m ? '<div class="small">' + esc(m.name || "") + "</div>" : "") + '</td><td style="min-width:200px">' + segBar(g.segments, 14) + '</td><td class="num">' + esc(g.total) + '</td><td class="mono small">' + esc(g.equation) + "</td><td>" + tag(g.ok ? "OK" : "FAIL") + "</td></tr>"; }).join("") +
+      arr(PGd.by_milestone).map(function (g) { var m = mm[g.group]; return '<tr><td><b class="mono">' + esc(g.group) + "</b>" + (m ? '<div class="small">' + esc(m.name || "") + "</div>" : "") + '</td><td style="min-width:200px">' + segBar(g.segments, 14) + '</td><td class="num">' + esc(g.total) + '</td><td class="mono small">' + esc(g.equation) + "</td><td>" + tag(g.ok ? "OK" : "FAIL") + msRule(g) + "</td></tr>"; }).join("") +
       "</tbody></table></div>", { cls: "span-all" }));
     out.push(card("mp-groups", "Exclusive buckets per milestone", '<div class="scroll-x"><table class="t"><thead><tr><th>Group</th><th>Breakdown</th><th class="num">Executable</th><th>Equation</th><th>Check</th></tr></thead><tbody>' +
       groups.map(function (g) { var m = mm[g.group]; return "<tr><td><b class=\"mono\">" + esc(g.group) + "</b>" + (m ? '<div class="small">' + esc(m.name || "") + '</div><div class="dim small">target ' + esc(m.target || NR) + "</div>" : "") + '</td><td style="min-width:180px">' + stackBar(g.counts, B, 12) + legend(g.counts, B) + '</td><td class="num">' + esc(g.executable) + '</td><td class="mono small">' + esc(g.equation) + "</td><td>" + tag(g.ok ? "OK" : "FAIL") + "</td></tr>"; }).join("") +
