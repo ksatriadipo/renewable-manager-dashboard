@@ -443,6 +443,7 @@
       '<div class="legend">' + SEG.map(function (k) { return "<span>" + sw(SEG_COL[k]) + esc(SEG_SHORT[k]) + " <b>" + esc(c[k] || 0) + "</b></span>"; }).join("") + "</div>";
   }
   function segTag(s) { return isNR(s) ? nr(s) : '<span class="tag" style="color:' + col(s) + '">' + esc(SEG_SHORT[s] || label(s)) + "</span>"; }
+  function ecNote(ec) { var n = obj(obj(ec).note); return n.text ? '<div class="small dim">Note: ' + esc(n.text) + (n.source ? " (" + esc(n.source) + ")" : "") + "</div>" : ""; }
   function progressNote(D) { var P = PG(D); return '<p class="note">Engineering completion = technically ready (accepted + awaiting acceptance) ÷ launch tasks. Formal acceptance = DONE only (rule unchanged). Awaiting acceptance is finished engineering waiting for a gate, not unfinished work. Reconciliation ' + tag(obj(P.reconciliation).ok ? "OK" : "FAIL") + ' <span class="mono small">' + esc(obj(P.reconciliation).equation || "") + "</span></p>"; }
   var CAT_SHORT = { OWNER_ACCEPTANCE: "Owner acceptance", AUDITOR_ACCEPTANCE: "Auditor / technical test", MISSING_EVIDENCE: "Missing evidence", DEPENDENCY: "Dependency" };
   function catTag(c) { return '<span class="tag" style="color:' + col(c) + '">' + esc(CAT_SHORT[c] || label(c)) + "</span>"; }
@@ -512,7 +513,7 @@
     out.push(card("mc-hero", P.project ? (obj(P.project).name || String(P.project)) : "Mission Control",
       '<p class="lead">' + sentence + "</p>" + (health ? '<div class="row small">Health rule ' + tag(health) + ' <span class="dim">(rule-based; see Blockers)</span></div>' : "") +
       '<div class="kpis six" style="margin-top:12px">' +
-      kpi(isNR(ec.pct) ? NR : ec.pct + " %", "Engineering completion", esc(ec.count) + " / " + esc(pgT) + " technically ready (incl. accepted)", SEG_COL.TECHNICALLY_READY_PENDING_ACCEPTANCE) +
+      kpi(isNR(ec.pct) ? NR : ec.pct + " %", "Engineering completion", esc(ec.count) + " / " + esc(pgT) + " technically ready (incl. accepted)" + ecNote(ec), SEG_COL.TECHNICALLY_READY_PENDING_ACCEPTANCE) +
       kpi(isNR(fa.pct) ? NR : fa.pct + " %", "Formal acceptance", esc(fa.count) + " / " + esc(pgT) + " accepted (DONE)", SEG_COL.ACCEPTED) +
       kpi(isNR(segc.TECHNICALLY_READY_PENDING_ACCEPTANCE) ? NR : segc.TECHNICALLY_READY_PENDING_ACCEPTANCE, "Awaiting acceptance", "technically ready, not yet DONE", col("QA_PASS")) +
       kpi(isNR(segc.NOT_TECHNICALLY_READY) ? NR : segc.NOT_TECHNICALLY_READY, "Remaining engineering work", "launch tasks not technically ready", col("PLANNED")) +
@@ -609,7 +610,7 @@
     var ew = obj(M.effort_weighted_done);
     var PGd = PG(D), sc3 = segCounts(PGd.segments);
     out.push(card("mp-k", "Progress (launch scope)", '<div class="kpis six">' + kpi(obj(M.denominator).launch_executable, "Executable launch tasks", "", "#b3badf") +
-      kpi(obj(PGd.engineering_completion).count, "Engineering completion", esc(obj(PGd.engineering_completion).pct) + " % technically ready (incl. accepted)", SEG_COL.TECHNICALLY_READY_PENDING_ACCEPTANCE) +
+      kpi(obj(PGd.engineering_completion).count, "Engineering completion", esc(obj(PGd.engineering_completion).pct) + " % technically ready (incl. accepted)" + ecNote(obj(PGd.engineering_completion)), SEG_COL.TECHNICALLY_READY_PENDING_ACCEPTANCE) +
       kpi(obj(PGd.formal_acceptance).count, "Formal acceptance (DONE)", esc(obj(PGd.formal_acceptance).pct) + " %", SEG_COL.ACCEPTED) + kpi(sc3.TECHNICALLY_READY_PENDING_ACCEPTANCE, "Awaiting acceptance", "technically ready, not DONE", col("QA_PASS")) +
       kpi(sc3.NOT_TECHNICALLY_READY, "Remaining engineering work", "not technically ready", col("PLANNED")) + "</div>" + (hasPG(D) ? segBar(PGd.segments, 18) + progressNote(D) : "") + '<div class="kpis six">' +
       kpi(M.missing_work_estimates, "Missing work estimates", "UNKNOWN, not zero", col("HOLD")) + kpi(M.intentional_zero_effort_rows, "Zero-effort decision/gate rows", "intentional", "#b3badf") + "</div>" +
