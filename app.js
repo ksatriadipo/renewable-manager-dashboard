@@ -487,8 +487,9 @@
     });
   }
   function msRule(g) {
-    var o = arr(g.outstanding_exit_criteria), r = g.rollup_rule;
+    var o = arr(g.outstanding_exit_criteria), u = arr(g.untracked_exit_criteria), r = g.rollup_rule;
     return (o.length ? '<div class="small">' + tag("OUTSTANDING EXIT") + " " + o.map(esc).join(" · ") + "</div>" : "") +
+      (u.length ? '<div class="small dim">Exit criteria not linked to a task (not counted as met): ' + u.map(esc).join(" · ") + "</div>" : "") +
       (r ? '<div class="small dim">Rollup: ' + esc(arr(r.not_technically_ready_buckets).join(", ")) + " not counted as technically ready (" + esc(r.source || "") + "); reclassified " + esc(arr(r.reclassified).join(" ")) + "</div>" : "");
   }
   function nextMilestone(D) {
