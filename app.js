@@ -30,7 +30,8 @@
     PARTIAL: "#ffb454", UNVERIFIED: "#ff9f5a", CONFIRMED: "#5fe39a", RECORDED: "#7cc4ff", NOT_CONNECTED: "#9aa3cf", "N/A": "#8f96bb",
     QA_PASS: "#b195ff", DIRECTOR_ACCEPTED: "#2fd3c3", HOLD: "#ffb454", PLANNED: "#9aa3cf", REWORK: "#ff9f5a", WAITING: "#ffb454", FUTURE: "#9aa3cf", INSUFFICIENT_DATA: "#ffb454", PROVISIONAL: "#ffb454",
     VALIDATED: "#5fe39a", INVALID: "#ff6b78", HELD: "#ffb454", FREE: "#5fe39a", UNQUALIFIED: "#ffb454", PASS_WITH_WARNINGS: "#ffb454", LAUNCH: "#7cc4ff", UNKNOWN: "#9aa3cf",
-    APPROVED: "#2fd3c3", PROPOSED: "#7cc4ff", NOT_AVAILABLE: "#9aa3cf", NOT_COMPUTED: "#9aa3cf", NEXT_MILESTONE: "#f6c85a", VALIDATION_FAILED: "#ff6b78", SOURCE_MISMATCH: "#ff6b78", RECONCILIATION_FAILED: "#ff6b78", SYNC_FAILED: "#ff6b78" };
+    APPROVED: "#2fd3c3", PROPOSED: "#7cc4ff", NOT_AVAILABLE: "#9aa3cf", NOT_COMPUTED: "#9aa3cf", NEXT_MILESTONE: "#f6c85a", VALIDATION_FAILED: "#ff6b78", SOURCE_MISMATCH: "#ff6b78", RECONCILIATION_FAILED: "#ff6b78", SYNC_FAILED: "#ff6b78",
+    TECHNICALLY_READY_PENDING_ACCEPTANCE: "#b195ff", NOT_TECHNICALLY_READY: "#9aa3cf", OWNER_ACCEPTANCE: "#2fd3c3", AUDITOR_ACCEPTANCE: "#7cc4ff", MISSING_EVIDENCE: "#ffb454", DEPENDENCY: "#ff9f5a" };
   function col(s) { return COLORS[String(s || "").toUpperCase().replace(/ /g, "_")] || "#b3badf"; }
   function label(s) { return String(s).replace(/_/g, " "); }
   function tag(s) { return isNR(s) ? nr(s) : '<span class="tag" style="color:' + col(s) + '">' + esc(label(s)) + "</span>"; }
@@ -427,6 +428,25 @@
   function kv(rows) { return '<dl class="kv">' + rows.map(function (r) { return "<dt>" + esc(r[0]) + "</dt><dd>" + r[1] + "</dd>"; }).join("") + "</dl>"; }
   function more(key, title, body, ctx) { return '<details class="toggle more"' + (ctx && ctx.ui.open[key] ? " open" : "") + ' data-open="' + esc(key) + '"><summary>' + esc(title) + '</summary><div class="more-in">' + body + "</div></details>"; }
   function notBuilt(D, key, title) { return card(key, title, "<p>pm " + nr(PM(D).state || NR) + ' — the Mission Control layer is not in this snapshot.</p><p class="note">' + esc(PM(D).note || "Expected key `pm` (DATA_CONTRACT v3).") + "</p>", { cls: "span-all" }); }
+  /* progress semantics (owner directive 22 Nov 2026): three mutually exclusive segments from pm.progress (one classifier in rmct/pm/progress.py) */
+  var SEG = ["ACCEPTED", "TECHNICALLY_READY_PENDING_ACCEPTANCE", "NOT_TECHNICALLY_READY"];
+  var SEG_SHORT = { ACCEPTED: "Accepted", TECHNICALLY_READY_PENDING_ACCEPTANCE: "Awaiting acceptance", NOT_TECHNICALLY_READY: "Not technically ready" };
+  var SEG_COL = { ACCEPTED: "#5fe39a", TECHNICALLY_READY_PENDING_ACCEPTANCE: "#b195ff", NOT_TECHNICALLY_READY: "#5b6390" };
+  function PG(D) { return obj(PM(D).progress); }
+  function hasPG(D) { return arr(PG(D).segments).length === 3; }
+  function segCounts(segs) { var c = {}; arr(segs).forEach(function (s) { c[s.id] = s.count; }); return c; }
+  function segBar(segs, h) {
+    var c = segCounts(segs), tot = SEG.reduce(function (a, k) { return a + (num(c[k]) || 0); }, 0);
+    if (!tot) return '<p class="empty">No launch task in this group.</p>';
+    return '<div class="segbar" role="img" aria-label="' + esc(SEG.map(function (k) { return SEG_SHORT[k] + " " + (c[k] || 0); }).join(", ")) + '"' + (h ? ' style="height:' + h + 'px"' : "") + ">" +
+      SEG.map(function (k) { var n = num(c[k]) || 0; return n ? '<i style="width:' + (100 * n / tot) + "%;background:" + SEG_COL[k] + '"' + (k === "NOT_TECHNICALLY_READY" ? ' class="lt"' : "") + ">" + (100 * n / tot >= 9 ? esc(n) : "") + "</i>" : ""; }).join("") + "</div>" +
+      '<div class="legend">' + SEG.map(function (k) { return "<span>" + sw(SEG_COL[k]) + esc(SEG_SHORT[k]) + " <b>" + esc(c[k] || 0) + "</b></span>"; }).join("") + "</div>";
+  }
+  function segTag(s) { return isNR(s) ? nr(s) : '<span class="tag" style="color:' + col(s) + '">' + esc(SEG_SHORT[s] || label(s)) + "</span>"; }
+  function progressNote(D) { var P = PG(D); return '<p class="note">Engineering completion = technically ready (accepted + awaiting acceptance) ÷ launch tasks. Formal acceptance = DONE only (rule unchanged). Awaiting acceptance is finished engineering waiting for a gate, not unfinished work. Reconciliation ' + tag(obj(P.reconciliation).ok ? "OK" : "FAIL") + ' <span class="mono small">' + esc(obj(P.reconciliation).equation || "") + "</span></p>"; }
+  var CAT_SHORT = { OWNER_ACCEPTANCE: "Owner acceptance", AUDITOR_ACCEPTANCE: "Auditor / technical test", MISSING_EVIDENCE: "Missing evidence", DEPENDENCY: "Dependency" };
+  function catTag(c) { return '<span class="tag" style="color:' + col(c) + '">' + esc(CAT_SHORT[c] || label(c)) + "</span>"; }
+  function queueCounts(D) { var q = obj(PM(D).acceptance_queue), b = obj(q.by_primary); return '<div class="kpis">' + ["DEPENDENCY", "AUDITOR_ACCEPTANCE", "MISSING_EVIDENCE", "OWNER_ACCEPTANCE"].map(function (k) { return kpi(num(b[k]) != null ? b[k] : NR, CAT_SHORT[k], "", col(k)); }).join("") + "</div>"; }
   function pctOf(n, d) { return d ? Math.round(1000 * n / d) / 10 : null; }
   function genericTable(rows, cap) {
     rows = arr(rows).filter(function (r) { return r && typeof r === "object"; }); if (!rows.length) return '<p class="empty">None recorded.</p>';
@@ -443,7 +463,7 @@
     if (valFail) out.push({ cls: "failed", title: "VALIDATION FAILED", msg: "The source failed validation; the figures below are the last verified snapshot, not the current state. " + (sy.error ? "Error: " + sy.error : arr(obj(P.validation).severe).join("; ")) });
     else if (sy.state === "FAILED") out.push({ cls: "failed", title: "Sync FAILED", msg: (sy.error ? "Sync error: " + sy.error + ". " : "") + sy.problems.join(" ") });
     if (sy.state === "STALE") out.push({ cls: "stale", title: "STALE", msg: "This snapshot is not current. " + sy.problems.join(" ") });
-    if (obj(P.reconciliation).ok === false) out.push({ cls: "failed", title: "RECONCILIATION FAILED", msg: "Exclusive status buckets do not add up to the executable count." });
+    if (obj(P.reconciliation).ok === false || obj(obj(P.progress).reconciliation).ok === false) out.push({ cls: "failed", title: "RECONCILIATION FAILED", msg: "Exclusive status buckets do not add up to the executable count." });
     var mm = probs.filter(function (p) { return /SOURCE MISMATCH/i.test(p); }).map(String);
     var regSha = obj(obj(P.sources).register).sha256, regPath = obj(obj(P.sources).register).path;
     if (regSha) {
@@ -468,7 +488,8 @@
   }
   function nextMilestone(D) {
     var groups = {}; arr(obj(PM(D).reconciliation).groups).forEach(function (g) { groups[g.group] = g; });
-    var ms = arr(PM(D).milestones); for (var i = 0; i < ms.length; i++) { var g = groups[ms[i].id]; if (!g || obj(g.counts).DONE !== g.executable) return { m: ms[i], g: g }; }
+    var pg = {}; arr(PG(D).by_milestone).forEach(function (g) { pg[g.group] = g; });
+    var ms = arr(PM(D).milestones); for (var i = 0; i < ms.length; i++) { var g = groups[ms[i].id]; if (!g || obj(g.counts).DONE !== g.executable) return { m: ms[i], g: g, p: pg[ms[i].id] }; }
     return null;
   }
   function vMission(D, now, ctx) {
@@ -477,21 +498,21 @@
     var openBl = arr(P.blockers).filter(function (b) { return b.open; }), ac = obj(P.action_center), cards = arr(ac.cards);
     var ready = cards.filter(function (c) { return c["class"] === "READY"; }), waiting = cards.filter(function (c) { return c["class"] === "WAITING"; });
     var etcB = obj(obj(F.effort).ETC_total).b, fst = fcEngine(F) ? F.status : NR, nMiss = arr(F.missing_inputs).length;
-    var done = obj(M.done), tr = obj(M.technical_ready), rb = obj(M.remaining_base);
-    var sentence = "DONE " + esc(isNR(done.count) ? NR : done.count) + " of " + esc(den) + " launch tasks (" + esc(done.pct) + " %); " + esc(tr.count) + " technically ready (" + esc(tr.pct) + " %), of which " + esc(obj(M.awaiting_acceptance).count) + " await acceptance. " +
+    var PGd = PG(D), ec = obj(PGd.engineering_completion), fa = obj(PGd.formal_acceptance), segc = segCounts(PGd.segments), pgT = hasPG(D) ? PGd.total : den;
+    var sentence = (hasPG(D) ? "Engineering " + esc(ec.count) + " of " + esc(pgT) + " launch tasks technically ready (" + esc(ec.pct) + " %): " + esc(fa.count) + " formally accepted (DONE), " + esc(segc.TECHNICALLY_READY_PENDING_ACCEPTANCE) + " awaiting acceptance; " + esc(segc.NOT_TECHNICALLY_READY) + " still need engineering. " : "Progress classification " + NR + ". ") +
       esc(ready.length) + " decision" + (ready.length === 1 ? " is" : "s are") + " ready for the Director; " + esc(openBl.length) + " blocker" + (openBl.length === 1 ? " is" : "s are") + " open. " +
       (fst === "VALIDATED" || fst === "PROVISIONAL" ? "Delivery forecast " + esc(fst) + "." : "No delivery date is forecast: " + esc(fst) + (nMiss ? " (" + nMiss + " missing inputs)." : "."));
     var health = obj(D.health).value;
     out.push(card("mc-hero", P.project ? (obj(P.project).name || String(P.project)) : "Mission Control",
       '<p class="lead">' + sentence + "</p>" + (health ? '<div class="row small">Health rule ' + tag(health) + ' <span class="dim">(rule-based; see Blockers)</span></div>' : "") +
       '<div class="kpis six" style="margin-top:12px">' +
-      kpi(isNR(done.pct) ? NR : done.pct + " %", "DONE", esc(done.count) + " / " + esc(den) + " launch tasks", col("DONE")) +
-      kpi(isNR(tr.pct) ? NR : tr.pct + " %", "Technically ready", "separate from DONE · " + esc(tr.count) + " / " + esc(den), col("QA_PASS")) +
-      kpi(isNR(rb.known_subtotal) ? NR : rb.known_subtotal, "Remaining (known subtotal)", esc(rb.unit || "") + " · " + esc(rb.missing_estimates) + " estimates missing", col("IN_PROGRESS")) +
+      kpi(isNR(ec.pct) ? NR : ec.pct + " %", "Engineering completion", esc(ec.count) + " / " + esc(pgT) + " technically ready (incl. accepted)", SEG_COL.TECHNICALLY_READY_PENDING_ACCEPTANCE) +
+      kpi(isNR(fa.pct) ? NR : fa.pct + " %", "Formal acceptance", esc(fa.count) + " / " + esc(pgT) + " accepted (DONE)", SEG_COL.ACCEPTED) +
+      kpi(isNR(segc.TECHNICALLY_READY_PENDING_ACCEPTANCE) ? NR : segc.TECHNICALLY_READY_PENDING_ACCEPTANCE, "Awaiting acceptance", "technically ready, not yet DONE", col("QA_PASS")) +
+      kpi(isNR(segc.NOT_TECHNICALLY_READY) ? NR : segc.NOT_TECHNICALLY_READY, "Remaining engineering work", "launch tasks not technically ready", col("PLANNED")) +
       kpi(openBl.length, "Active blockers", "open gates/decisions/risks", col("BLOCKED")) +
-      kpi(num(etcB) != null ? etcB + " h" : fst, "ETC base", num(etcB) != null ? "person-hours" : nMiss + " missing inputs", num(etcB) != null ? col("IN_PROGRESS") : col("HOLD")) +
-      kpi(fst, "Forecast status", fcEngine(F) ? "confidence: " + (obj(F.percentiles).status === "AVAILABLE" ? "calibrated" : "no calibrated percentiles") : "forecast engine not published", col(fst)) +
-      "</div>" + '<p class="foot">' + provLine(D, now) + ' · <a href="#sources">Details</a></p>', { cls: "span-all hero" }));
+      kpi(fst, "Forecast status", (num(etcB) != null ? "ETC base " + etcB + " h · " : nMiss + " missing inputs · ") + (fcEngine(F) ? (obj(F.percentiles).status === "AVAILABLE" ? "calibrated" : "no calibrated percentiles") : "engine not published"), col(fst)) +
+      "</div>" + (hasPG(D) ? '<div class="seg-wrap">' + segBar(PGd.segments, 22) + "</div>" : "") + '<p class="foot">' + provLine(D, now) + ' · <a href="#sources">Details</a></p>', { cls: "span-all hero" }));
     var top = topImpact(D)[0], bm = {}; arr(P.blockers).forEach(function (b) { bm[b.id] = b; });
     var drv = F.top_schedule_driver;
     out.push(card("mc-bottleneck", "Current bottleneck", top ?
@@ -507,7 +528,7 @@
     out.push(card("mc-workers", "Active workers & next milestone",
       list(act, function (w) { return '<li><div class="row sb"><b>' + esc(w.role || w.id) + "</b><span class=\"small dim\">capacity " + val(w.capacity_h_per_week) + "</span></div><div>" + ids(w.active) + "</div></li>"; }, "No worker has an active task recorded.") +
       (nm ? '<div class="ms-next"><div class="row">' + tag("NEXT MILESTONE") + ' <b class="mono">' + esc(nm.m.id) + "</b> " + esc(nm.m.name || "") + '</div><div class="small muted">Target ' + val(nm.m.target) + " · exit: " + val(nm.m.exit) + "</div>" +
-        (nm.g ? stackBar(nm.g.counts, bucketsOf(D), 10) + '<div class="small dim">' + esc(nm.g.equation) + "</div>" : "") + "</div>" : '<p class="empty">No open milestone recorded.</p>'),
+        (nm.p ? segBar(nm.p.segments, 12) + '<div class="small dim">' + esc(nm.p.equation) + "</div>" : nm.g ? stackBar(nm.g.counts, bucketsOf(D), 10) + '<div class="small dim">' + esc(nm.g.equation) + "</div>" : "") + "</div>" : '<p class="empty">No open milestone recorded.</p>'),
       { right: '<a class="btn small" href="#workers">Workers</a>' }));
     return { title: "Mission Control", sub: "Are we on track? Health, primary KPIs, bottleneck and the decisions needed now", cards: out, grid: "grid two" };
   }
@@ -530,6 +551,9 @@
     out.push(card("ac-k", "Decisions by readiness", '<div class="kpis">' + kpi(obj(ac.counts).READY, "READY for decision", "", col("READY")) + kpi(obj(ac.counts).WAITING, "WAITING (evidence/dependency)", "", col("HOLD")) +
       kpi(obj(ac.counts).FUTURE, "FUTURE (not actionable)", "", col("PLANNED")) + kpi(arr(ac.approved).length, "Approved (register)", "see Decisions", col("DIRECTOR_ACCEPTED")) + "</div>" +
       (arr(ac.problems).length ? list(ac.problems, function (p) { return '<li class="small t-warn">' + esc(p) + "</li>"; }) : "") + more("ac:rule", "Classification rule", "<p>" + val(ac.rule) + "</p>", ctx), { cls: "span-all" }));
+    if (hasPG(D)) { var aq = obj(PM(D).acceptance_queue);
+      out.push(card("ac-accq", "Acceptance queue (" + esc(num(aq.count) != null ? aq.count : NR) + " technically ready tasks awaiting acceptance)", queueCounts(D) +
+        '<p class="note">Primary next gate per task; ' + esc(aq.also_waiting_on_unaccepted_deps) + " also wait for predecessors to be accepted. Not immediately acceptable: each item names what it waits for.</p>" + '<a class="btn small" href="#quality">Open acceptance queue</a>', { cls: "span-all" })); }
     [["READY", "READY for decision"], ["WAITING", "WAITING for evidence / dependency"], ["FUTURE", "FUTURE / not actionable"]].forEach(function (k) {
       var cs = cards.filter(function (c) { return c["class"] === k[0]; }), key = "ac:" + k[0], cap = k[0] === "READY" ? 6 : 3;
       out.push(card("ac-" + k[0], k[1] + " (" + cs.length + ")", list(ctx.ui.open[key] ? cs : cs.slice(0, cap), decisionCard, "None.") +
@@ -577,12 +601,18 @@
     arr(P.milestones).forEach(function (m) { mm[m.id] = m; });
     var groups = arr(rec.groups), uiOk = groups.every(function (g) { return B.reduce(function (a, k) { return a + (num(obj(g.counts)[k]) || 0); }, 0) === g.executable; });
     var ew = obj(M.effort_weighted_done);
-    out.push(card("mp-k", "Progress (launch scope)", '<div class="kpis six">' + kpi(obj(M.denominator).launch_executable, "Executable launch tasks", "", "#b3badf") + kpi(obj(M.done).count, "DONE", esc(obj(M.done).pct) + " %", col("DONE")) +
-      kpi(obj(M.technical_ready).count, "Technically ready", esc(obj(M.technical_ready).pct) + " %", col("QA_PASS")) + kpi(obj(M.awaiting_acceptance).count, "Awaiting acceptance", "", col("DIRECTOR_ACCEPTED")) +
+    var PGd = PG(D), sc3 = segCounts(PGd.segments);
+    out.push(card("mp-k", "Progress (launch scope)", '<div class="kpis six">' + kpi(obj(M.denominator).launch_executable, "Executable launch tasks", "", "#b3badf") +
+      kpi(obj(PGd.engineering_completion).count, "Engineering completion", esc(obj(PGd.engineering_completion).pct) + " % technically ready (incl. accepted)", SEG_COL.TECHNICALLY_READY_PENDING_ACCEPTANCE) +
+      kpi(obj(PGd.formal_acceptance).count, "Formal acceptance (DONE)", esc(obj(PGd.formal_acceptance).pct) + " %", SEG_COL.ACCEPTED) + kpi(sc3.TECHNICALLY_READY_PENDING_ACCEPTANCE, "Awaiting acceptance", "technically ready, not DONE", col("QA_PASS")) +
+      kpi(sc3.NOT_TECHNICALLY_READY, "Remaining engineering work", "not technically ready", col("PLANNED")) + "</div>" + (hasPG(D) ? segBar(PGd.segments, 18) + progressNote(D) : "") + '<div class="kpis six">' +
       kpi(M.missing_work_estimates, "Missing work estimates", "UNKNOWN, not zero", col("HOLD")) + kpi(M.intentional_zero_effort_rows, "Zero-effort decision/gate rows", "intentional", "#b3badf") + "</div>" +
       '<p class="foot">Effort-weighted DONE ' + val(ew.pct, function (x) { return x + " %"; }) + " (coverage " + val(ew.coverage_tasks) + ") · reconciliation " + tag(rec.ok ? "OK" : "FAIL") + " · UI re-check " + tag(uiOk ? "OK" : "FAIL") + "</p>" +
       more("mp:def", "Definitions", kv([["Denominator", val(obj(M.denominator).rule)], ["DONE rule", esc(JSON.stringify(obj(P.status_mapping).done_rule))], ["Technical readiness", esc(arr(obj(M.technical_ready).buckets).join(" + "))],
         ["Remaining", val(obj(M.remaining_base).note)], ["Buckets", esc(B.join(" · ")) + " (mutually exclusive)"]]), ctx), { cls: "span-all" }));
+    if (hasPG(D)) out.push(card("mp-prog", "Progress segments per milestone", '<div class="scroll-x"><table class="t"><thead><tr><th>Group</th><th>Accepted · awaiting acceptance · not technically ready</th><th class="num">Launch tasks</th><th>Equation</th><th>Check</th></tr></thead><tbody>' +
+      arr(PGd.by_milestone).map(function (g) { var m = mm[g.group]; return '<tr><td><b class="mono">' + esc(g.group) + "</b>" + (m ? '<div class="small">' + esc(m.name || "") + "</div>" : "") + '</td><td style="min-width:200px">' + segBar(g.segments, 14) + '</td><td class="num">' + esc(g.total) + '</td><td class="mono small">' + esc(g.equation) + "</td><td>" + tag(g.ok ? "OK" : "FAIL") + "</td></tr>"; }).join("") +
+      "</tbody></table></div>", { cls: "span-all" }));
     out.push(card("mp-groups", "Exclusive buckets per milestone", '<div class="scroll-x"><table class="t"><thead><tr><th>Group</th><th>Breakdown</th><th class="num">Executable</th><th>Equation</th><th>Check</th></tr></thead><tbody>' +
       groups.map(function (g) { var m = mm[g.group]; return "<tr><td><b class=\"mono\">" + esc(g.group) + "</b>" + (m ? '<div class="small">' + esc(m.name || "") + '</div><div class="dim small">target ' + esc(m.target || NR) + "</div>" : "") + '</td><td style="min-width:180px">' + stackBar(g.counts, B, 12) + legend(g.counts, B) + '</td><td class="num">' + esc(g.executable) + '</td><td class="mono small">' + esc(g.equation) + "</td><td>" + tag(g.ok ? "OK" : "FAIL") + "</td></tr>"; }).join("") +
       "</tbody></table></div>", { cls: "span-all" }));
@@ -596,6 +626,7 @@
     var F = FC(D), out = [], P = PM(D);
     if (!fcEngine(F)) { out.push(card("fc-none", "Forecast", "<p>forecast engine output " + nr() + ' — this snapshot predates the forecast wiring.</p><p class="note">Uncalibrated v1 projections are not shown as P50/P80.</p>', { cls: "span-all" })); return { title: "Timeline & forecast", sub: "", cards: out, grid: "grid" }; }
     var sc = obj(F.scenarios), mi = arr(F.missing_inputs), cov = obj(F.coverage), ef = obj(F.effort);
+    if (hasPG(D)) out.push(card("fc-prog", "Progress basis", segBar(PG(D).segments, 16) + '<p class="note">Remaining engineering work = ' + esc(segCounts(PG(D).segments).NOT_TECHNICALLY_READY) + " launch tasks; " + esc(segCounts(PG(D).segments).TECHNICALLY_READY_PENDING_ACCEPTANCE) + " more wait only for acceptance gates (see Quality &amp; acceptance).</p>", { cls: "span-all" }));
     function scen(k) { var s = obj(sc[k]), l = obj(s.launch); return "<tr><td><b>" + esc(label(k)) + "</b></td><td>" + tag(s.status || NR) + "</td><td>" + (l.finish ? dateCell(l.finish) : tag(l.status || s.status || NR)) + '</td><td class="num">' + (num(l.working_days) != null ? esc(l.working_days) : nr()) + "</td></tr>"; }
     out.push(card("fc-status", "Delivery forecast", '<div class="row">' + tag(F.status) + ' <span class="small muted">as of ' + dateCell(F.as_of) + " · " + esc(F.scheduling_mode || "") + "</span></div>" +
       (F.status === "INSUFFICIENT_DATA" ? '<p class="lead t-warn">No delivery date is forecast: ' + mi.length + " required inputs are missing. Nothing is estimated in their place.</p>" : "") +
@@ -645,6 +676,7 @@
     var q = String(ui.q || "").toLowerCase().trim(), f = obj(ui.f);
     return nodes(D).filter(function (n) {
       if (f.bucket && (n.bucket || n.scope) !== f.bucket) return false;
+      if (f.prog && (n.progress || "OUT_OF_LAUNCH") !== f.prog) return false;
       if (f.ws && n.workstream !== f.ws) return false;
       if (f.ms && String(n.milestone) !== f.ms) return false;
       if (q && [n.id, n.title, n.status, n.bucket, n.workstream, n.milestone, n.owner_code, n.worker, n.batch].join(" ").toLowerCase().indexOf(q) < 0) return false;
@@ -659,13 +691,14 @@
     var N = nodes(D), B = bucketsOf(D), ui = ctx.ui;
     var bks = uniq(N.map(function (n) { return n.bucket || n.scope; })).sort(function (a, b) { return (B.indexOf(a) < 0 ? 99 : B.indexOf(a)) - (B.indexOf(b) < 0 ? 99 : B.indexOf(b)); });
     out.push(card("tr-ctl", "Search & filter", '<div class="filters"><label class="fld"><span>Search</span><input id="trk-q" type="search" autocomplete="off" placeholder="ID, title, owner…" aria-label="Search tasks"></label>' +
+      '<label class="fld"><span>Progress</span><select data-f="prog" aria-label="Filter by progress segment"><option value="">All progress</option>' + SEG.concat(["OUT_OF_LAUNCH"]).map(function (k) { return '<option value="' + k + '">' + esc(SEG_SHORT[k] || "Not in launch scope") + "</option>"; }).join("") + "</select></label>" +
       '<label class="fld"><span>Bucket</span><select data-f="bucket" aria-label="Filter by bucket">' + opts(bks, "All buckets") + "</select></label>" +
       '<label class="fld"><span>Workstream</span><select data-f="ws" aria-label="Filter by workstream">' + opts(uniq(N.map(function (n) { return n.workstream; })), "All workstreams") + "</select></label>" +
       '<label class="fld"><span>Milestone</span><select data-f="ms" aria-label="Filter by milestone">' + opts(uniq(N.map(function (n) { return n.milestone; })), "All milestones") + "</select></label></div>", { cls: "span-all" }));
     var rows = trkFilter(D, ui), all = ui.open["tr:all"], shown = all ? rows : rows.slice(0, TRK_CAP);
     out.push(card("tr-res", "Canonical tasks", '<p class="small muted" aria-live="polite">Showing ' + shown.length + " of " + rows.length + " matching (" + N.length + " nodes in the register)</p>" +
-      '<div class="scroll-x"><table class="t trk"><thead><tr><th>ID</th><th>Title</th><th>Bucket</th><th>Status</th><th>Workstream</th><th>Milestone</th><th>Owner</th><th>Scope</th></tr></thead><tbody>' +
-      shown.map(function (n) { return '<tr><td><button class="idlink" type="button" data-node="' + esc(n.id) + '" aria-label="Details ' + esc(n.id) + '">' + esc(n.id) + "</button></td><td>" + esc(n.title) + "</td><td>" + tag(n.bucket || n.scope) + "</td><td>" + tag(n.status) + "</td><td>" + val(n.workstream) + "</td><td>" + val(n.milestone) + "</td><td>" + val(n.owner_code) + "</td><td>" + tag(n.scope) + "</td></tr>"; }).join("") +
+      '<div class="scroll-x"><table class="t trk"><thead><tr><th>ID</th><th>Title</th><th>Progress</th><th>Bucket</th><th>Status</th><th>Workstream</th><th>Milestone</th><th>Owner</th><th>Scope</th></tr></thead><tbody>' +
+      shown.map(function (n) { return '<tr><td><button class="idlink" type="button" data-node="' + esc(n.id) + '" aria-label="Details ' + esc(n.id) + '">' + esc(n.id) + "</button></td><td>" + esc(n.title) + "</td><td>" + (n.progress ? segTag(n.progress) : '<span class="dim small">not launch</span>') + "</td><td>" + tag(n.bucket || n.scope) + "</td><td>" + tag(n.status) + "</td><td>" + val(n.workstream) + "</td><td>" + val(n.milestone) + "</td><td>" + val(n.owner_code) + "</td><td>" + tag(n.scope) + "</td></tr>"; }).join("") +
       "</tbody></table></div>" + (rows.length > TRK_CAP ? '<button class="btn small" type="button" data-toggle="tr:all">' + (all ? "Show first " + TRK_CAP : "Show all " + rows.length) + "</button>" : ""), { cls: "span-all" }));
     var ws = workstreams(D).list;
     out.push(card("tr-ws", "Workstreams (" + ws.length + ")", list(ws, function (w) { var c = obj(w.counts); return '<li><div class="row sb"><b>' + esc(w.name || w.id) + '</b><span class="small dim">' + esc(w.total != null ? w.total : arr(w.tasks).length) + " tasks</span></div>" + stackBar(c, Object.keys(c), 8) + legend(c, Object.keys(c)) + "</li>"; }), { cls: "span-all" }));
@@ -675,7 +708,7 @@
     var n = nodeMap(D)[id]; if (!n) return '<p class="empty">' + esc(id) + " is not a node in this snapshot.</p>";
     var P = PM(D), bl = arr(P.blockers).filter(function (b) { return arr(b.targets).indexOf(id) >= 0; }), dependents = nodes(D).filter(function (x) { return arr(x.deps).indexOf(id) >= 0; }).map(function (x) { return x.id; });
     var ac = obj(n.acceptance), ev = arr(P.events).filter(function (e) { return e.ref === id; });
-    return "<h2>" + esc(n.title) + "</h2>" + '<div class="row">' + tag(n.bucket) + tag(n.status) + tag(n.scope) + tag(n.node_type) + "</div>" +
+    return "<h2>" + esc(n.title) + "</h2>" + '<div class="row">' + (n.progress ? segTag(n.progress) : "") + tag(n.bucket) + tag(n.status) + tag(n.scope) + tag(n.node_type) + "</div>" +
       kv([["Kind", val(n.kind)], ["Batch", val(n.batch)], ["Milestone", val(n.milestone)], ["Workstream", val(n.workstream)], ["Owner", val(n.owner_code) + " · " + val(n.worker)], ["Lifecycle", val(n.lifecycle)], ["Visual", tag(n.visual)],
         ["Estimate base / conservative", val(n.est_base) + " / " + val(n.est_conservative)], ["Depends on", ids(n.deps, 30)], ["Dependents", ids(dependents, 30)], ["Blocked by", bl.length ? bl.map(function (b) { return esc(b.id) + " " + tag(b.open ? "OPEN" : "RESOLVED"); }).join("<br>") : '<span class="dim">none</span>'],
         ["Scope reason", val(n.scope_reason)]]) +
@@ -690,6 +723,15 @@
     if (built(D)) {
       var dims = ["technical", "visual", "director", "device", "release"], L = nodes(D).filter(function (n) { return n.scope === "LAUNCH" && n.executable; }), M = {}, vals = [];
       dims.forEach(function (d) { M[d] = {}; L.forEach(function (n) { var v = obj(n.acceptance)[d] || NR; M[d][v] = (M[d][v] || 0) + 1; if (vals.indexOf(v) < 0) vals.push(v); }); });
+      if (hasPG(D)) {
+        var aq = obj(PM(D).acceptance_queue), qi = arr(aq.items), qall = ctx.ui.open["qa:queue"];
+        out.push(card("qa-prog", "Engineering vs formal acceptance", segBar(PG(D).segments, 20) + progressNote(D), { cls: "span-all" }));
+        out.push(card("qa-queue", "Acceptance queue (" + qi.length + ")", queueCounts(D) +
+          '<div class="scroll-x"><table class="t"><thead><tr><th>#</th><th>Task</th><th>Next gate</th><th>Waits for</th><th>After predecessors</th><th class="num">Dependents</th><th>Milestone</th></tr></thead><tbody>' +
+          (qall ? qi : qi.slice(0, 12)).map(function (x) { return '<tr><td class="num">' + esc(x.position) + '</td><td><button class="idlink" type="button" data-node="' + esc(x.id) + '">' + esc(x.id) + '</button><div class="small">' + esc(x.title) + '</div><div class="small dim">' + esc(label(x.status)) + " · visual " + esc(label(x.visual)) + "</div></td><td>" + catTag(x.primary) + '</td><td class="small">' + arr(x.awaits).map(function (a) { return esc(CAT_SHORT[a.category] || a.category) + ": " + esc(a.reason); }).join("<br>") + "</td><td>" + ids(x.after_unaccepted_deps, 4) + '</td><td class="num">' + esc(x.dependents) + "</td><td>" + val(x.milestone) + "</td></tr>"; }).join("") +
+          "</tbody></table></div>" + (qi.length > 12 ? '<button class="btn small" type="button" data-toggle="qa:queue">' + (qall ? "Show fewer" : "Show all " + qi.length) + "</button>" : "") +
+          more("qa:qrule", "Queue rule", "<p>" + val(aq.rule) + "</p>", ctx), { cls: "span-all" }));
+      }
       out.push(card("qa-acc", "Acceptance dimensions (" + L.length + " launch tasks)", '<p class="note">Technical QA, visual, Director, device and release acceptance are distinct; one never implies another.</p>' +
         list(dims, function (d) { return '<li><div class="row sb"><b>' + esc(label(d)) + "</b></div>" + stackBar(M[d], vals, 10) + legend(M[d], vals) + "</li>"; }) +
         more("qa:dod", "Definition of done", kv([["DONE rule", esc(JSON.stringify(obj(PM(D).status_mapping).done_rule))], ["Accepted but not done", esc(JSON.stringify(obj(PM(D).status_mapping).accepted_not_done || NR))]]), ctx), { cls: "span-all" }));

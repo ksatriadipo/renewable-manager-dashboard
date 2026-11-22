@@ -223,3 +223,8 @@ table.t tbody tr:hover, table.t tbody tr:focus-within { background: rgba(124, 19
 .kpi .v.txt { font-size: 17px; line-height: 1.2; overflow-wrap: normal; word-break: normal; }
 .idlink { white-space: nowrap; }
 @media (max-width: 480px) { .kv { grid-template-columns: minmax(0, 1fr); gap: 0 0; } .kv dt { margin-top: 6px; font-size: 12.5px; } }
+/* progress semantics: three mutually exclusive segments with numbers in the bar + labelled legend */
+.segbar { height: 18px; border-radius: 8px; background: rgba(255, 255, 255, .08); overflow: hidden; display: flex; margin: 6px 0 4px; }
+.segbar > i { display: flex; align-items: center; justify-content: center; height: 100%; font-style: normal; font-size: 11px; font-weight: 700; color: #10142b; min-width: 0; overflow: hidden; }
+.segbar > i.lt { color: #eef0ff; }
+.seg-wrap { margin-top: 12px; }
