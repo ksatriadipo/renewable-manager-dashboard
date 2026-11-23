@@ -1,0 +1,23 @@
+# b0_pickup15x_r587 — pikap perusahaan di dunia 15× (G-U22)
+
+Patch: b0_pickup15x_r587
+Jalur: Gerak 15× (Motion15x/Motion15xView) + alat QA traffic15x
+Butir ceklist / temuan: G-U22 (QA r584 traffic15x `truck=none pickup=missing`; Pilar 2)
+Apa yang berubah: RenewableCEO/Assets/Scripts/Core/World/X15/Pickup15x.cs (+.meta, baru), RenewableCEO/Assets/Scripts/Core/World/X15/Motion15x.cs, RenewableCEO/Assets/Scripts/Game/World/X15/Motion15xView.cs, RenewableCEO/Assets/Scripts/Game/UI/Screens/HubHUD.Traffic15xShot.cs, RenewableCEO/Assets/Tests/EditMode/Pickup15xTests.cs (+.meta, baru); rincian:
+- `RenewableCEO/Assets/Scripts/Core/World/X15/Pickup15x.cs` (+meta, BARU): perencana rute pikap di graf jalan kendaraan Motion15x yang sama (Dijkstra simpul HQ → titik lajur terdekat lokasi, pulang searah lalu ke simpul HQ), titik = `RoadGraph.Offset` lajur kiri; sakelar `Pickup15x.Enabled` (PickupTrips15x) bawaan NYALA; `PickupLenM` 4,8 m × K15.
+- `RenewableCEO/Assets/Scripts/Core/World/X15/Motion15x.cs`: `AgentKind.Pickup` (ditambah di akhir enum), `MotionSim.StartPickup/StartPickupAt/ReturnPickup`, keadaan pergi → di lokasi (kru r551/r552 via `SetSiteWorkers` saat tiba) → pulang → dicabut di HQ; event `PickupEvent`; jam `Clock`; pikap ikut aturan jaga jarak (`Blocked`), pikap parkir menahan mobil di belakangnya.
+- `RenewableCEO/Assets/Scripts/Game/World/X15/Motion15xView.cs`: pikap diikat ke model pikap pustaka A2 lama (`A2Vehicle.Create` tanpa override = `TruckFor` kendaraan aktif); `SyncSites` (proyek tahap Construction di sel 15×) memberangkatkan pikap dari kampus HqSite (kavling r559; cadangan jangkar hq:yard/door) dan memulangkannya saat tahap selesai; log `[PICKUP15X] ev=… start=… path_len=… lane=left arrive=… return=… home=…`.
+- `RenewableCEO/Assets/Scripts/Game/UI/Screens/HubHUD.Traffic15xShot.cs` (r584): pikap ikut diukur (lajur/aspal/tumpang tindih/lompatan); tanpa proyek berjalan di simpanan uji satu perjalanan dipicu ke slot pembangkit (dicatat `forced=1`); `pickup=missing` + FAIL hanya bila pikap benar-benar tidak ada; RESULT PASS bila semua kriteria lolos.
+- `RenewableCEO/Assets/Tests/EditMode/Pickup15xTests.cs` (+meta, BARU): rute HQ→klien Goldmeadow (region_hq_v5) lajur kiri di aspal, tidak di dalam bangunan, perjalanan penuh pergi/tiba/pulang tanpa lompatan, ukuran × K15, sakelar mati.
+
+Kenapa: G-U22 (QA r584: `truck=none pickup=missing`), Pilar 2 "Dunia terlihat bekerja" + §4 langkah 3 (pikap berangkat → jalan → klien → membangun → pulang).
+
+Dampak: KPI target traffic15x pickup≠missing, `[PICKUP15X]` di log. KPI lindung: lalu lintas desa (agen/urutan acak tidak berubah: pikap dibuat sesudah konstruksi Sim), Motion15xViewTests/Motion15xTests (`SetSiteWorkers` langsung tetap seketika), ekonomi/tempo tidak disentuh (laju pikap = `CarSpeedMs` mobil Motion15x; timer proyek Core tidak dibaca/diubah). Risiko: mobil desa di belakang pikap yang parkir menunggu selama tahap Construction (antre, bukan tumpang tindih); proyek yang sudah Construction saat muat simpanan → pikap berangkat dari HQ lagi (kru tiba bersama pikap).
+
+Cara membatalkan: `git apply -R b0_pickup15x_r587.patch` atau `Pickup15x.Enabled = false` (perilaku lama: kru langsung muncul, tanpa pikap). Tangkapan diulang: traffic15x + adegan konstruksi 15×.
+
+Verifikasi offline: basis = HEAD 8d6a8e7 + antrean p0r11 (r581b, r586, r584, r585) + r582b; Roslyn offline TOTAL 0 (Core/Game/Core.Tests/Game.Tests/Editor 0). Simulasi Core di luar Unity (dotnet, region_hq_v5): rute 5,4 km pergi / 5,46 km pulang (5/6 tautan), tiba t=43,4 dtk, pulang t=87,3 dtk, off_asphalt 0, di dalam bangunan 0, lompatan 0 (langkah maks = laju×dt), pikap dicabut di HQ. Sampel "lajur kanan" metrik sumbu-terdekat: pikap 44/872, mobil desa 10/434 — semuanya di mulut simpang tempat sumbu terdekat = jalan silang (artefak Offset yang sama dengan mobil desa); tes EditMode mengecualikan titik itu. EditMode belum dijalankan di Unity.
+
+Cek konsep: Pilar 2 (pikap berangkat/membangun/pulang terlihat), NN-04 (pikap 4,8 m × K15, sama dengan konstanta Motion15x; tokoh kru tetap jalur r551/r552), NN-09 (lajur kiri di aspal, tanpa teleport: pulang mulai dari titik berhenti; kru belum "duduk di dalam" pikap — lihat sisa), VPS guide §3 (tanpa sistem paralel: graf jalan, agen, view, model pikap, kru = komponen yang ada).
+
+Sisa (belum dalam patch ini): kru belum terlihat naik/turun dan duduk di pikap (muncul di titik kerja saat pikap tiba, hilang saat pikap berangkat pulang); pikap berangkat dari simpul jalan terdekat kampus HQ, belum dari petak parkir/carport kavling r559; durasi tempuh = jarak/laju mobil Motion15x, tidak disamakan dengan TravelPlan lama (DriveGrid tidak ada di 15×); antrean mobil desa di belakang pikap parkir.
