@@ -500,6 +500,7 @@
     return null;
   }
   // Release-path headline (OPERATING_RULES_V2 §1-§2): CT/SL from release_path.json + daily budget. "n/a" = source missing.
+  function ctslF(w) { var e = Object.keys(obj(w)); return e.length ? e.map(function (k) { return k + "×" + Number(obj(w)[k]).toFixed(2); }).join(" + ") : "n/a"; }
   function ctslPct(x) { return x === "n/a" || x == null ? "n/a" : x + " %"; }
   function ctslCap(m, unit) { m = obj(m); return m.value === "n/a" || m.value == null ? "n/a" : (m.value + (unit || "") + " / " + m.cap + (unit || "")); }
   function ctslCard(D) {
@@ -509,8 +510,8 @@
     var gates = arr(R.gates).map(function (g) { return kpi(ctslPct(g.pct), g.id + " " + g.name, esc(g.met) + " / " + esc(g.total) + " MET" + (g.deferred ? " · " + esc(g.deferred) + " deferred" : "")); }).join("");
     return card("mc-ctsl", "Kemajuan jalur rilis",
       '<p class="lead">Dihitung dari <span class="mono">' + esc(R.source) + "</span>" + (R.state !== "OK" ? " — " + esc(R.state) + ": " + esc(R.reason || "") : "") + ". " + esc(R.gate_rule) + ".</p>" +
-      '<div class="kpis six" style="margin-top:12px">' + kpi(ctslPct(obj(R.ct).pct), "Menuju uji tertutup", "G1×0.45 + G2×0.55", col("QA_PASS")) +
-      kpi(ctslPct(obj(R.sl).pct), "Menuju soft launch", "G1×0.20 + G2×0.25 + G3×0.20 + G4×0.30 + G5×0.05", col("QA_PASS")) + gates + "</div>" +
+      '<div class="kpis six" style="margin-top:12px">' + kpi(ctslPct(obj(R.ct).pct), "Menuju uji tertutup", ctslF(obj(R.ct).weights), col("QA_PASS")) +
+      kpi(ctslPct(obj(R.sl).pct), "Menuju soft launch", ctslF(obj(R.sl).weights), col("QA_PASS")) + gates + "</div>" +
       '<h3 class="small" style="margin-top:12px">Anggaran harian (' + esc(B.day) + " UTC)</h3>" +
       '<div class="kpis six">' + kpi(ctslCap(B.agents_started), "Agen dimulai hari ini", "batas 16 run/hari") + kpi(ctslCap(B.agents_running), "Agen berjalan", "batas 4 bersamaan") +
       kpi(ctslCap(B.unity_rounds), "Ronde Unity hari ini", "batas 4/hari (ronde utama)") + kpi(tok, "Token keluaran hari ini", "sasaran ≤ 1 jt; dihitung per sync" + (T.seconds != null ? " (" + esc(T.seconds) + " dtk)" : "")) +
