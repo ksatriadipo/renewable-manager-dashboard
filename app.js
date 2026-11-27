@@ -499,6 +499,24 @@
     var ms = arr(PM(D).milestones); for (var i = 0; i < ms.length; i++) { var g = groups[ms[i].id]; if (!g || obj(g.counts).DONE !== g.executable) return { m: ms[i], g: g, p: pg[ms[i].id] }; }
     return null;
   }
+  // Release-path headline (OPERATING_RULES_V2 §1-§2): CT/SL from release_path.json + daily budget. "n/a" = source missing.
+  function ctslPct(x) { return x === "n/a" || x == null ? "n/a" : x + " %"; }
+  function ctslCap(m, unit) { m = obj(m); return m.value === "n/a" || m.value == null ? "n/a" : (m.value + (unit || "") + " / " + m.cap + (unit || "")); }
+  function ctslCard(D) {
+    var R = obj(obj(D.release).path_ctsl); if (!R.schema) return null;
+    var B = obj(R.budget), T = obj(B.output_tokens), dk = obj(B.disk_free_gb), lg = obj(R.legacy_u37h);
+    var tok = T.value === "n/a" || T.value == null ? "n/a" : (Math.round(T.value / 1000) + " k / " + Math.round(T.cap / 1000) + " k");
+    var gates = arr(R.gates).map(function (g) { return kpi(ctslPct(g.pct), g.id + " " + g.name, esc(g.met) + " / " + esc(g.total) + " MET" + (g.deferred ? " · " + esc(g.deferred) + " deferred" : "")); }).join("");
+    return card("mc-ctsl", "Kemajuan jalur rilis",
+      '<p class="lead">Dihitung dari <span class="mono">' + esc(R.source) + "</span>" + (R.state !== "OK" ? " — " + esc(R.state) + ": " + esc(R.reason || "") : "") + ". " + esc(R.gate_rule) + ".</p>" +
+      '<div class="kpis six" style="margin-top:12px">' + kpi(ctslPct(obj(R.ct).pct), "Menuju uji tertutup", "G1×0.45 + G2×0.55", col("QA_PASS")) +
+      kpi(ctslPct(obj(R.sl).pct), "Menuju soft launch", "G1×0.20 + G2×0.25 + G3×0.20 + G4×0.30 + G5×0.05", col("QA_PASS")) + gates + "</div>" +
+      '<h3 class="small" style="margin-top:12px">Anggaran harian (' + esc(B.day) + " UTC)</h3>" +
+      '<div class="kpis six">' + kpi(ctslCap(B.agents_started), "Agen dimulai hari ini", "batas 16 run/hari") + kpi(ctslCap(B.agents_running), "Agen berjalan", "batas 4 bersamaan") +
+      kpi(ctslCap(B.unity_rounds), "Ronde Unity hari ini", "batas 4/hari (ronde utama)") + kpi(tok, "Token keluaran hari ini", "sasaran ≤ 1 jt; dihitung per sync" + (T.seconds != null ? " (" + esc(T.seconds) + " dtk)" : "")) +
+      kpi(dk.value === "n/a" || dk.value == null ? "n/a" : dk.value + " GB", "Disk bebas", "sasaran ≥ " + esc(dk.target) + " GB · retensi < " + esc(dk.floor) + " GB") + "</div>" +
+      '<p class="foot">Detail: register U37H lama ' + esc(ctslPct(lg.pct)) + " (" + esc(lg.count) + " / " + esc(lg.total) + " ACCEPTED) — bukan judul, lihat kartu di bawah.</p>", { cls: "span-all hero" });
+  }
   function vMission(D, now, ctx) {
     if (!built(D)) { var o = vOverview(D, now, ctx); o.cards.unshift(notBuilt(D, "mc-none", "Mission Control")); return o; }
     var P = PM(D), M = obj(P.metrics), den = obj(M.denominator).launch_executable, F = FC(D), out = [];
@@ -509,8 +527,9 @@
     var sentence = (hasPG(D) ? "Engineering " + esc(ec.count) + " of " + esc(pgT) + " launch tasks technically ready (" + esc(ec.pct) + " %): " + esc(fa.count) + " formally accepted (DONE), " + esc(segc.TECHNICALLY_READY_PENDING_ACCEPTANCE) + " awaiting acceptance; " + esc(segc.NOT_TECHNICALLY_READY) + " still need engineering. " : "Progress classification " + NR + ". ") +
       esc(ready.length) + " decision" + (ready.length === 1 ? " is" : "s are") + " ready for the Director; " + esc(openBl.length) + " blocker" + (openBl.length === 1 ? " is" : "s are") + " open. " +
       (fst === "VALIDATED" || fst === "PROVISIONAL" ? "Delivery forecast " + esc(fst) + "." : "No delivery date is forecast: " + esc(fst) + (nMiss ? " (" + nMiss + " missing inputs)." : "."));
-    var health = obj(D.health).value;
-    out.push(card("mc-hero", P.project ? (obj(P.project).name || String(P.project)) : "Mission Control",
+    var health = obj(D.health).value, ctsl = ctslCard(D);
+    if (ctsl) out.push(ctsl);
+    out.push(card("mc-hero", (ctsl ? "Detail: register U37H — " : "") + (P.project ? (obj(P.project).name || String(P.project)) : "Mission Control"),
       '<p class="lead">' + sentence + "</p>" + (health ? '<div class="row small">Health rule ' + tag(health) + ' <span class="dim">(rule-based; see Blockers)</span></div>' : "") +
       '<div class="kpis six" style="margin-top:12px">' +
       kpi(isNR(ec.pct) ? NR : ec.pct + " %", "Engineering completion", esc(ec.count) + " / " + esc(pgT) + " technically ready (incl. accepted)" + ecNote(ec), SEG_COL.TECHNICALLY_READY_PENDING_ACCEPTANCE) +
